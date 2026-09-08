@@ -1,0 +1,19 @@
+{
+  "name": "Schlaftagebuch",
+  "short_name": "Schlaf",
+  "description": "Persönliches Schlaftagebuch. Alle Daten bleiben lokal auf dem Gerät.",
+  "lang": "de",
+  "dir": "ltr",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#12151c",
+  "theme_color": "#12151c",
+  "categories": ["health", "lifestyle", "utilities"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
