@@ -1,7 +1,7 @@
 /* Service Worker – macht die App vollständig offline nutzbar.
    Bei jeder Code-Änderung die Versionsnummer erhöhen, dann holt sich
    das Handy beim nächsten Start automatisch die neuen Dateien. */
-const VERSION = 'schlaftagebuch-v1';
+const VERSION = 'schlaftagebuch-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -9,9 +9,9 @@ const ASSETS = [
   './core.js',
   './app.js',
   './manifest.webmanifest',
-  './icons/icon-192.png',
-  './icons/icon-512.png',
-  './icons/icon-maskable-512.png'
+  './icon-192.png',
+  './icon-512.png',
+  './icon-maskable-512.png'
 ];
 
 self.addEventListener('install', (event) => {
