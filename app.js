@@ -13,6 +13,7 @@
   var KEY_SETTINGS = 'schlaftagebuch.settings.v1';
   var KEY_BACKUP = 'schlaftagebuch.backup.v1';
   var KEY_PLANNED = 'schlaftagebuch.planned.v1';
+  var APP_VERSION = 'v6';
 
   var $ = function (sel) { return document.querySelector(sel); };
   var $$ = function (sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); };
@@ -1159,6 +1160,8 @@
     body.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: 'Über diese App' }),
       el('p', { class: 'note-small', html:
+        'Fassung <strong>' + APP_VERSION + '</strong>. Wenn hier eine ältere Nummer steht als erwartet, ' +
+        'hat das Handy noch alte Dateien im Zwischenspeicher.<br><br>' +
         'Eine Nacht trägt immer das Datum des Abends, an dem du ins Bett gehst. Die letzte eintragbare Nacht ist deshalb die von gestern.<br><br>' +
         'Alle Einträge liegen ausschließlich im Speicher dieses Browsers auf diesem Gerät. ' +
         'Es gibt kein Konto, keinen Server, keine Werbung und keine Analyse durch Dritte. ' +
@@ -1553,7 +1556,16 @@
 
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () {
-        navigator.serviceWorker.register('sw.js').catch(function (e) { console.warn('SW', e); });
+        // updateViaCache: 'none' – der Service Worker selbst darf nie aus dem
+        // Browser-Cache kommen, sonst bemerkt das Handy neue Versionen nicht.
+        navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' })
+          .then(function (reg) {
+            reg.update();
+            document.addEventListener('visibilitychange', function () {
+              if (document.visibilityState === 'visible') reg.update();
+            });
+          })
+          .catch(function (e) { console.warn('SW', e); });
       });
     }
   }

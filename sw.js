@@ -1,7 +1,7 @@
 /* Service Worker – macht die App vollständig offline nutzbar.
    Bei jeder Code-Änderung die Versionsnummer erhöhen, dann holt sich
    das Handy beim nächsten Start automatisch die neuen Dateien. */
-const VERSION = 'schlaftagebuch-v5';
+const VERSION = 'schlaftagebuch-v6';
 const ASSETS = [
   './',
   './index.html',
@@ -17,7 +17,12 @@ const ASSETS = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(VERSION)
-      .then((cache) => cache.addAll(ASSETS))
+      .then((cache) => cache.addAll(
+        // 'reload' erzwingt frische Dateien vom Server. Ohne das kann der
+        // normale Browser-Cache alte Dateien in den neuen Cache legen –
+        // dann bleibt die App trotz neuer Version alt.
+        ASSETS.map((url) => new Request(url, { cache: 'reload' }))
+      ))
       .then(() => self.skipWaiting())
   );
 });
