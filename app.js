@@ -68,16 +68,27 @@
       : [];
     var s = readJson(KEY_SETTINGS, {});
     state.settings = Object.assign({}, C.DEFAULT_SETTINGS, s || {});
+    if (!Array.isArray(state.settings.factorList) || !state.settings.factorList.length) {
+      state.settings.factorList = C.defaultCatalog();
+    } else {
+      state.settings.factorList = C.sanitizeCatalog(state.settings.factorList);
+    }
+    C.setFactorCatalog(state.settings.factorList);
+
     if (!Array.isArray(state.settings.factors) || !state.settings.factors.length) {
       state.settings.factors = C.DEFAULT_FACTORS.slice();
     }
+    // Nur aktive Faktoren behalten, die es auch im Katalog gibt
+    var ids = state.settings.factorList.map(function (f) { return f.id; });
+    state.settings.factors = state.settings.factors.filter(function (id) { return ids.indexOf(id) >= 0; });
+    if (!state.settings.factors.length) state.settings.factors = ids.slice(0, 1);
     if (!isFinite(state.settings.minMin)) state.settings.minMin = C.DEFAULT_SETTINGS.minMin;
     if (state.settings.minMin > state.settings.goalMin) state.settings.minMin = state.settings.goalMin;
 
     // Vormerkung für eine kommende Nacht. Nur gültig, solange die Nacht
     // nicht schon als richtiger Eintrag existiert und nicht zu alt ist.
     var pl = readJson(KEY_PLANNED, null);
-    state.planned = (pl && C.isValidKey(pl.date) && pl.date >= C.addDays(todayKey(), -2)) ? pl : null;
+    state.planned = (pl && C.isValidKey(pl.date) && pl.date >= C.addDays(refDate(), -2)) ? pl : null;
   }
 
   function savePlanned(p) {
@@ -87,7 +98,10 @@
   }
 
   function saveEntries() { return writeJson(KEY_ENTRIES, C.sortEntries(state.entries)); }
-  function saveSettings() { return writeJson(KEY_SETTINGS, state.settings); }
+  function saveSettings() {
+    C.setFactorCatalog(state.settings.factorList);
+    return writeJson(KEY_SETTINGS, state.settings);
+  }
 
   function getEntry(date) {
     for (var i = 0; i < state.entries.length; i++) if (state.entries[i].date === date) return state.entries[i];
@@ -163,12 +177,19 @@
   }
 
   function todayKey() { return C.dateKey(new Date()); }
-  // Letzte vollständige Nacht = gestern. Die Nacht von heute Abend lässt sich
+
+  // Der Tageswechsel der App liegt um 03:00, nicht um Mitternacht. Wer um
+  // halb zwei nachts noch wach ist, steckt gefühlt noch im Vortag – und die
+  // laufende Nacht ist noch nicht vorbei.
+  var DAY_CUTOFF_HOURS = 3;
+  function refDate() { return C.dateKey(new Date(Date.now() - DAY_CUTOFF_HOURS * 3600 * 1000)); }
+
+  // Letzte vollständige Nacht = der Vorabend. Die laufende Nacht lässt sich
   // nur vormerken, deshalb reicht die Navigation einen Tag weiter.
-  function lastNight() { return C.addDays(todayKey(), -1); }
+  function lastNight() { return C.addDays(refDate(), -1); }
   function maxDate() { return lastNight(); }
-  function navMax() { return todayKey(); }
-  function isPlannedDate(d) { return d === todayKey(); }
+  function navMax() { return refDate(); }
+  function isPlannedDate(d) { return d === refDate(); }
 
   function qualityWord(q) {
     if (q <= 2) return 'wie gerädert';
@@ -176,6 +197,21 @@
     if (q <= 6) return 'geht so';
     if (q <= 8) return 'gut';
     return 'top erholt';
+  }
+
+  // Temperaturen werden mit Komma angezeigt, aber mit Punkt gerechnet
+  function tempText(v) {
+    if (v === null || v === undefined) return '';
+    return (Math.round(v * 10) / 10).toFixed(1).replace('.', ',');
+  }
+
+  function lastKnownTemp(field) {
+    var list = C.sortEntries(state.entries);
+    for (var i = list.length - 1; i >= 0; i--) {
+      var v = list[i][field];
+      if (v !== null && v !== undefined) return v;
+    }
+    return null;
   }
 
   function statusClass(sleepMin) {
@@ -199,8 +235,8 @@
       latency: C.LATENCY_OPTIONS[0].value,
       awake: C.AWAKE_OPTIONS[0].value,
       quality: 7,
-      tempBed: null,
-      tempWake: null,
+      tempBed: lastKnownTemp('tempBed'),
+      tempWake: lastKnownTemp('tempWake'),
       factors: [],
       note: ''
     };
@@ -262,7 +298,8 @@
     var wrap = $('#chipsFactors');
     wrap.innerHTML = '';
     var active = state.settings.factors || C.DEFAULT_FACTORS;
-    C.FACTORS.filter(function (f) { return active.indexOf(f.id) >= 0; }).forEach(function (f) {
+    (state.settings.factorList || C.defaultCatalog())
+      .filter(function (f) { return active.indexOf(f.id) >= 0; }).forEach(function (f) {
       var on = state.draft.factors.indexOf(f.id) >= 0;
       wrap.appendChild(el('button', {
         type: 'button', class: 'chip', text: f.label, title: f.hint,
@@ -276,7 +313,7 @@
       }));
     });
     if (!wrap.children.length) {
-      wrap.appendChild(el('p', { class: 'note-small', text: 'Keine Faktoren aktiv. Unter „Mehr“ auswählen.' }));
+      wrap.appendChild(el('p', { class: 'note-small', text: 'Keine Faktoren aktiv. Unter „Einstellungen“ auswählen.' }));
     }
   }
 
@@ -308,8 +345,7 @@
     $('#qualVal').textContent = d.quality;
     $('#qualWord').textContent = ' · ' + qualityWord(d.quality);
     if (document.activeElement !== $('#inNote')) $('#inNote').value = d.note || '';
-    if (document.activeElement !== $('#inTempBed')) $('#inTempBed').value = d.tempBed === null || d.tempBed === undefined ? '' : d.tempBed;
-    if (document.activeElement !== $('#inTempWake')) $('#inTempWake').value = d.tempWake === null || d.tempWake === undefined ? '' : d.tempWake;
+    renderTemps();
 
     buildChoice($('#segLatency'), '#freeLatency', '#inLatency', C.LATENCY_OPTIONS, 'freeLatency',
       function () { return d.latency; }, function (v) { d.latency = v; });
@@ -329,24 +365,38 @@
       $('#heroUnit').textContent = 'h';
 
       var total = der.timeInBed;
+      // Die Skala reicht immer mindestens bis über das Ziel hinaus. So sind
+      // beide Striche stets sichtbar und die Balken verschiedener Nächte
+      // lassen sich miteinander vergleichen.
+      var axisMax = Math.ceil(Math.max(total, goal + 30) / 30) * 30;
       function seg(cls, min) {
         if (min <= 0) return;
-        bar.appendChild(el('div', { class: 'seg ' + cls, style: 'width:' + (min / total * 100) + '%' }));
+        bar.appendChild(el('div', { class: 'seg ' + cls, style: 'width:' + (min / axisMax * 100) + '%' }));
       }
       seg('seg-idle', der.latency);
       seg('seg-sleep is-' + statusClass(der.sleep), der.sleep);
       seg('seg-idle', der.awake);
       [minimum, goal].forEach(function (v) {
-        if (v > 0 && v < total) bar.appendChild(el('div', { class: 'mark', style: 'left:' + (v / total * 100) + '%' }));
+        if (v > 0 && v <= axisMax) bar.appendChild(el('div', { class: 'mark', style: 'left:' + (v / axisMax * 100) + '%' }));
       });
-      $('#legendBed').textContent = d.bed + ' Uhr';
-      $('#legendWake').textContent = d.wake + ' Uhr';
+
+      // Stundenskala unter dem Balken, damit die Striche einzuordnen sind
+      var scale = $('#barScale');
+      scale.innerHTML = '';
+      var stepH = axisMax > 11 * 60 ? 2 : 1;
+      for (var hh = stepH; hh * 60 <= axisMax - 15; hh += stepH) {
+        scale.appendChild(el('i', { style: 'left:' + (hh * 60 / axisMax * 100) + '%', text: hh + 'h' }));
+      }
+      $('#barHint').innerHTML =
+        'Balken = Zeit im Bett, schraffiert = wach gelegen. Striche: ' +
+        '<b>Minimum ' + C.formatDuration(minimum, { short: true }) + '</b> und ' +
+        '<b>Ziel ' + C.formatDuration(goal, { short: true }) + '</b>.';
     } else {
       $('#heroNum').textContent = '–';
       $('#heroNum').className = 'hero-num';
       $('#heroUnit').textContent = '';
-      $('#legendBed').textContent = '–';
-      $('#legendWake').textContent = '–';
+      $('#barScale').innerHTML = '';
+      $('#barHint').textContent = 'Bitte die Zeiten prüfen.';
     }
 
     // Warnungen und Fehler
@@ -360,8 +410,8 @@
     }
 
     var exists = !!getEntry(state.date);
+    var hasPlan = !!(state.planned && state.planned.date === state.date);
     if (planned) {
-      var hasPlan = !!(state.planned && state.planned.date === state.date);
       $('#btnSave').textContent = hasPlan ? 'Vormerkung aktualisieren' : 'Für heute Nacht vormerken';
       $('#btnDeleteEntry').textContent = 'Vormerkung löschen';
       $('#btnDeleteEntry').style.display = hasPlan ? '' : 'none';
@@ -371,6 +421,62 @@
       $('#btnDeleteEntry').textContent = 'Diesen Eintrag löschen';
       $('#btnDeleteEntry').style.display = exists ? '' : 'none';
     }
+    updateSaveBar();
+  }
+
+  // Der Speicherknopf erscheint nur, wenn es etwas zu speichern gibt:
+  // bei einer noch nicht erfassten Nacht oder nach einer Änderung.
+  function shouldShowSave() {
+    if (state.view !== 'night') return false;
+    if (state.dirty) return true;
+    return isPlannedDate(state.date)
+      ? !(state.planned && state.planned.date === state.date)
+      : !getEntry(state.date);
+  }
+
+  function updateSaveBar() {
+    $('#saveBar').classList.toggle('is-visible', shouldShowSave());
+  }
+
+  // „nicht bekannt“ gilt für beide Felder gemeinsam
+  function tempsUnknown() {
+    var d = state.draft;
+    var bedEmpty = d.tempBed === null || d.tempBed === undefined;
+    var wakeEmpty = d.tempWake === null || d.tempWake === undefined;
+    return isPlannedDate(state.date) ? bedEmpty : (bedEmpty && wakeEmpty);
+  }
+
+  function renderTemps() {
+    var d = state.draft;
+    var unknown = tempsUnknown();
+    var box = $('#tempUnknown');
+    if (document.activeElement !== box) box.checked = unknown;
+    [['#inTempBed', 'tempBed'], ['#inTempWake', 'tempWake']].forEach(function (pair) {
+      var input = $(pair[0]);
+      input.disabled = unknown;
+      input.parentNode.classList.toggle('is-off', unknown);
+      if (document.activeElement !== input) input.value = unknown ? '' : tempText(d[pair[1]]);
+    });
+  }
+
+  function setTempsUnknown(unknown) {
+    var d = state.draft;
+    if (unknown) {
+      d.tempBed = null;
+      d.tempWake = null;
+    } else {
+      // Beim Aufklappen mit dem zuletzt gemessenen Wert starten
+      if (d.tempBed === null || d.tempBed === undefined) {
+        d.tempBed = lastKnownTemp('tempBed');
+        if (d.tempBed === null) d.tempBed = 20;
+      }
+      if (!isPlannedDate(state.date) && (d.tempWake === null || d.tempWake === undefined)) {
+        d.tempWake = lastKnownTemp('tempWake');
+        if (d.tempWake === null) d.tempWake = d.tempBed;
+      }
+    }
+    touch();
+    renderTemps();
   }
 
   function saveDraft() {
@@ -397,7 +503,6 @@
     var der = C.derive(d);
     toast('Gespeichert · ' + C.formatDuration(der.sleep) + ' Schlaf');
     renderNight();
-    show('stats');
   }
 
   /* -------------------------------------------------------- Diagramme */
@@ -453,8 +558,10 @@
     for (var hv = 0; hv <= yMax; hv += 60) {
       svg.appendChild(s('line', { x1: padL, x2: W - padR, y1: y(hv), y2: y(hv),
         stroke: 'var(--line-soft)', 'stroke-width': 1 }));
-      svg.appendChild(s('text', { x: padL - 4, y: y(hv) + 3.5, 'text-anchor': 'end',
-        'font-size': 9, fill: 'var(--text-faint)', text: (hv / 60) + 'h' }));
+      if (hv > 0) {
+        svg.appendChild(s('text', { x: padL - 4, y: y(hv) + 3.5, 'text-anchor': 'end',
+          'font-size': 9, fill: 'var(--text-faint)', text: (hv / 60) + 'h' }));
+      }
     }
 
     series.forEach(function (p, i) {
@@ -537,9 +644,15 @@
 
   function addXLabels(svg, series, x, H, days) {
     var step = days <= 10 ? 1 : (days <= 31 ? 5 : 15);
+    var last = series.length - 1;
     series.forEach(function (p, i) {
-      if ((series.length - 1 - i) % step !== 0) return;
-      svg.appendChild(s('text', { x: x(i), y: H - 6, 'text-anchor': 'middle', 'font-size': 9,
+      var regular = (last - i) % step === 0;
+      // Ganz links immer ein Datum, aber nur wenn es nicht mit dem
+      // nächsten regulären Wert kollidiert.
+      var firstOne = i === 0 && !regular && (last % step) >= Math.ceil(step / 2);
+      if (!regular && !firstOne) return;
+      svg.appendChild(s('text', { x: x(i), y: H - 6,
+        'text-anchor': i === 0 ? 'start' : 'middle', 'font-size': 9,
         fill: 'var(--text-faint)', text: C.formatDate(p.date, 'short') }));
     });
   }
@@ -679,8 +792,8 @@
     durCard.appendChild(el('div', { class: 'chart-wrap' }, [durationChart(state.range)]));
     durCard.appendChild(el('div', { class: 'legend', html:
       '<span><i class="swatch" style="background:var(--ok)"></i>Ziel erreicht</span>' +
-      '<span><i class="swatch" style="background:var(--mid)"></i>dazwischen</span>' +
       '<span><i class="swatch" style="background:var(--bad)"></i>unter Minimum</span>' +
+      '<span><i class="swatch" style="background:var(--mid)"></i>dazwischen</span>' +
       '<span><i class="swatch swatch-line" style="background:var(--text);opacity:.7"></i>5-Tages-Schnitt</span>' }));
 
     var readout = el('div', { class: 'readout' });
@@ -907,26 +1020,98 @@
       text: 'Mit diesen Zeiten startet jede neue Nacht. Je näher sie an deinem Alltag liegen, desto weniger musst du morgens tippen.' }));
     body.appendChild(preCard);
 
-    // Faktoren
-    var facCard = el('div', { class: 'card' }, [el('h2', { text: 'Faktoren im Eintrag' })]);
-    var chips = el('div', { class: 'chips' });
-    C.FACTORS.forEach(function (f) {
-      var on = (state.settings.factors || []).indexOf(f.id) >= 0;
-      chips.appendChild(el('button', { class: 'chip', type: 'button', text: f.label, title: f.hint,
-        'aria-pressed': String(on),
-        onclick: function () {
+    // Besondere Faktoren
+    var facCard = el('div', { class: 'card' }, [el('h2', { text: 'Besondere Faktoren' })]);
+    var list = state.settings.factorList;
+    var active = state.settings.factors;
+
+    list.forEach(function (f) {
+      var used = state.entries.some(function (e) { return (e.factors || []).indexOf(f.id) >= 0; });
+      var row = el('div', { class: 'factor-row' });
+
+      row.appendChild(el('input', {
+        type: 'checkbox', checked: active.indexOf(f.id) >= 0 ? 'checked' : null,
+        'aria-label': f.label + ' im Eintrag anzeigen',
+        onchange: function () {
           var arr = state.settings.factors.slice();
-          var i = arr.indexOf(f.id);
-          if (i >= 0) arr.splice(i, 1); else arr.push(f.id);
-          if (!arr.length) { toast('Mindestens ein Faktor muss aktiv bleiben.', true); return; }
-          if (arr.length > 8) { toast('Mehr als acht Faktoren machen die Eingabe morgens zu langsam.', true); return; }
+          var k = arr.indexOf(f.id);
+          if (this.checked && k < 0) arr.push(f.id);
+          if (!this.checked && k >= 0) arr.splice(k, 1);
+          if (!arr.length) {
+            this.checked = true;
+            toast('Mindestens ein Faktor muss aktiv bleiben.', true);
+            return;
+          }
           state.settings.factors = arr;
-          saveSettings(); renderMore();
-        } }));
+          saveSettings();
+          renderNight();
+        }
+      }));
+
+      row.appendChild(el('input', {
+        type: 'text', value: f.label, maxlength: '40', 'aria-label': 'Name des Faktors',
+        onchange: function () {
+          var name = this.value.trim().slice(0, 40);
+          if (!name) { this.value = f.label; return; }
+          f.label = name;
+          state.settings.factorList = C.sanitizeCatalog(state.settings.factorList);
+          saveSettings();
+          renderNight();
+          renderMore();
+        }
+      }));
+
+      row.appendChild(el('button', {
+        class: 'del', type: 'button', text: '×',
+        disabled: used ? 'disabled' : null,
+        title: used ? 'Wird in gespeicherten Nächten verwendet und kann nur ausgeblendet werden' : 'Faktor löschen',
+        'aria-label': 'Faktor „' + f.label + '“ löschen',
+        onclick: function () {
+          if (state.settings.factorList.length <= 1) { toast('Der letzte Faktor lässt sich nicht löschen.', true); return; }
+          state.settings.factorList = state.settings.factorList.filter(function (x) { return x.id !== f.id; });
+          state.settings.factors = state.settings.factors.filter(function (id) { return id !== f.id; });
+          if (!state.settings.factors.length) state.settings.factors = [state.settings.factorList[0].id];
+          saveSettings();
+          renderNight();
+          renderMore();
+          toast('„' + f.label + '“ gelöscht');
+        }
+      }));
+
+      facCard.appendChild(row);
     });
-    facCard.appendChild(chips);
+
+    var full = list.length >= C.MAX_FACTORS;
+    var addField = el('input', {
+      type: 'text', maxlength: '40', placeholder: 'Neuer Faktor, z. B. Sauna',
+      'aria-label': 'Neuen Faktor benennen', disabled: full ? 'disabled' : null
+    });
+    function addFactor() {
+      var name = addField.value.trim().slice(0, 40);
+      if (!name) return;
+      if (state.settings.factorList.length >= C.MAX_FACTORS) {
+        toast('Mehr als ' + C.MAX_FACTORS + ' Faktoren sind nicht möglich.', true);
+        return;
+      }
+      var id = C.makeFactorId(name, state.settings.factorList);
+      state.settings.factorList = C.sanitizeCatalog(state.settings.factorList.concat([{ id: id, label: name, hint: '' }]));
+      if (state.settings.factors.indexOf(id) < 0) state.settings.factors.push(id);
+      saveSettings();
+      renderNight();
+      renderMore();
+      toast('„' + name + '“ hinzugefügt');
+    }
+    addField.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') addFactor(); });
+    facCard.appendChild(el('div', { class: 'factor-add' }, [
+      addField,
+      el('button', { type: 'button', text: 'Hinzufügen', disabled: full ? 'disabled' : null, onclick: addFactor })
+    ]));
+
     facCard.appendChild(el('p', { class: 'note-small',
-      text: 'Weniger ist hier mehr: Jeder Faktor braucht mindestens fünf Nächte mit und fünf ohne, bevor die App etwas dazu sagen kann. Bereits erfasste Faktoren bleiben in den Daten erhalten, auch wenn du sie hier ausblendest.' }));
+      text: 'Angehakte Faktoren erscheinen beim Eintrag. Namen lassen sich jederzeit ändern – gespeicherte Nächte bleiben dabei richtig zugeordnet. ' +
+        'Ein Faktor, der schon in einer Nacht vorkommt, lässt sich nicht löschen, sondern nur ausblenden. ' +
+        'Möglich sind bis zu ' + C.MAX_FACTORS + ' Faktoren (aktuell ' + list.length + '). ' +
+        'Bedenke: Jeder Faktor braucht mindestens fünf Nächte mit und fünf ohne, bevor die Auswertung etwas dazu sagen kann.' }));
     body.appendChild(facCard);
 
     // Darstellung
@@ -1161,7 +1346,7 @@
       if (b.dataset.view === view) b.setAttribute('aria-current', 'page');
       else b.removeAttribute('aria-current');
     });
-    $('#saveBar').classList.toggle('is-visible', view === 'night');
+    updateSaveBar();
     if (view === 'stats') renderStats();
     if (view === 'more') renderMore();
     if (view === 'night') renderNight();
@@ -1178,7 +1363,7 @@
     show('night');
   }
 
-  function touch() { state.dirty = true; }
+  function touch() { state.dirty = true; updateSaveBar(); }
 
   function renderAll() {
     if (state.date > navMax()) state.date = navMax();
@@ -1235,7 +1420,7 @@
       if (C.toMin(this.value) !== null) { state.draft.wake = this.value; touch(); renderNight(); }
     });
 
-    $$('.stepbtn').forEach(function (b) {
+    $$('.stepbtn[data-step]').forEach(function (b) {
       b.addEventListener('click', function () {
         var parts = b.dataset.step.split(':');
         var field = parts[0], delta = parseInt(parts[1], 10);
@@ -1263,11 +1448,29 @@
     });
 
     [['#inTempBed', 'tempBed'], ['#inTempWake', 'tempWake']].forEach(function (pair) {
-      $(pair[0]).addEventListener('input', function () {
-        state.draft[pair[1]] = this.value === '' ? null : C.cleanTemp(this.value);
+      var input = $(pair[0]);
+      input.addEventListener('input', function () {
+        state.draft[pair[1]] = this.value.trim() === '' ? null : C.cleanTemp(this.value);
         touch();
       });
+      // Beim Verlassen aufräumen: gerundet, mit Komma, Unsinn zurücksetzen
+      input.addEventListener('blur', function () { renderTemps(); });
     });
+
+    $$('.stepbtn[data-temp]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var parts = b.dataset.temp.split(':');
+        var field = parts[0], delta = parseFloat(parts[1]);
+        var cur = state.draft[field];
+        if (cur === null || cur === undefined) cur = lastKnownTemp(field);
+        if (cur === null || cur === undefined) cur = 20;
+        state.draft[field] = Math.max(-20, Math.min(50, Math.round((cur + delta) * 10) / 10));
+        touch();
+        renderTemps();
+      });
+    });
+
+    $('#tempUnknown').addEventListener('change', function () { setTempsUnknown(this.checked); });
 
     $('#inQuality').addEventListener('input', function () {
       state.draft.quality = parseInt(this.value, 10);

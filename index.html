@@ -42,8 +42,8 @@
 
     <div class="planned-note" id="plannedNote" hidden>
       <strong>Kommende Nacht</strong>
-      <span>Du kannst schon vormerken, wann du ins Bett gehst, wie warm es ist und was heute war.
-      Morgen früh steht das dann fertig da und du ergänzt nur noch den Rest.</span>
+      <span>Du kannst schon vormerken, wann du ins Bett gehst, wie warm es ist und was heute Besonderes war.
+      Morgen früh ergänzt du nur noch den Rest.</span>
     </div>
 
     <div class="hero" id="hero">
@@ -53,10 +53,8 @@
         <span class="hero-unit" id="heroUnit">h</span>
       </div>
       <div class="nightbar" id="nightBar" aria-hidden="true"></div>
-      <div class="nightbar-legend">
-        <span id="legendBed">–</span>
-        <span id="legendWake">–</span>
-      </div>
+      <div class="barscale" id="barScale" aria-hidden="true"></div>
+      <p class="nightbar-hint" id="barHint"></p>
     </div>
 
     <div id="entryWarnings"></div>
@@ -83,25 +81,37 @@
     </div>
 
     <div class="field" id="fieldTemp">
-      <span class="lbl">Zimmertemperatur <span style="color:var(--text-faint)">optional</span></span>
+      <span class="lbl">Zimmertemperatur</span>
       <div class="timerow">
         <div class="timecell" id="cellTempBed">
           <div class="lbl">Beim Einschlafen</div>
           <div class="timeinput">
-            <input type="number" id="inTempBed" step="0.5" min="-20" max="50" inputmode="decimal"
-                   placeholder="–" aria-label="Temperatur beim Einschlafen in Grad Celsius">
-            <span class="unit">°C</span>
+            <button class="stepbtn" data-temp="tempBed:-0.1" aria-label="Temperatur beim Einschlafen 0,1 Grad kälter">−</button>
+            <span class="tempgroup">
+              <input type="text" id="inTempBed" inputmode="decimal" placeholder="–"
+                     aria-label="Temperatur beim Einschlafen in Grad Celsius">
+              <span class="unit">°C</span>
+            </span>
+            <button class="stepbtn" data-temp="tempBed:0.1" aria-label="Temperatur beim Einschlafen 0,1 Grad wärmer">+</button>
           </div>
         </div>
         <div class="timecell" id="cellTempWake">
           <div class="lbl">Beim Aufwachen</div>
           <div class="timeinput">
-            <input type="number" id="inTempWake" step="0.5" min="-20" max="50" inputmode="decimal"
-                   placeholder="–" aria-label="Temperatur beim Aufwachen in Grad Celsius">
-            <span class="unit">°C</span>
+            <button class="stepbtn" data-temp="tempWake:-0.1" aria-label="Temperatur beim Aufwachen 0,1 Grad kälter">−</button>
+            <span class="tempgroup">
+              <input type="text" id="inTempWake" inputmode="decimal" placeholder="–"
+                     aria-label="Temperatur beim Aufwachen in Grad Celsius">
+              <span class="unit">°C</span>
+            </span>
+            <button class="stepbtn" data-temp="tempWake:0.1" aria-label="Temperatur beim Aufwachen 0,1 Grad wärmer">+</button>
           </div>
         </div>
       </div>
+      <label class="checkline">
+        <input type="checkbox" id="tempUnknown">
+        <span>nicht bekannt</span>
+      </label>
     </div>
 
     <div class="field" id="fieldLatency">
@@ -134,7 +144,7 @@
     </div>
 
     <div class="field">
-      <span class="lbl">Was war an diesem Tag? <span style="color:var(--text-faint)">Nur antippen, was zutrifft</span></span>
+      <span class="lbl">Besondere Faktoren? <span style="color:var(--text-faint)">Nur antippen, was zutrifft</span></span>
       <div class="chips" id="chipsFactors" role="group" aria-label="Tagesfaktoren"></div>
     </div>
 
@@ -169,7 +179,7 @@
 <nav class="nav" aria-label="Hauptnavigation">
   <button data-view="night" aria-current="page"><span class="ic" aria-hidden="true">☾</span>Nacht</button>
   <button data-view="stats"><span class="ic" aria-hidden="true">◴</span>Auswertung</button>
-  <button data-view="more"><span class="ic" aria-hidden="true">⚙</span>Mehr</button>
+  <button data-view="more"><span class="ic" aria-hidden="true">⚙</span>Einstellungen</button>
 </nav>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>

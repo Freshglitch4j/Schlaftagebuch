@@ -71,9 +71,14 @@ html, body {
   font-size: 16px;
   line-height: 1.5;
   -webkit-text-size-adjust: 100%;
+}
+
+/* „clip“ statt „hidden“: verhindert waagrechtes Scrollen, ohne aus dem
+   Dokument einen eigenen Scrollbereich zu machen – sonst lässt sich die
+   Seite auf dem Handy nicht mehr senkrecht scrollen. */
+html {
+  overflow-x: clip;
   overscroll-behavior-y: contain;
-  max-width: 100%;
-  overflow-x: hidden;
 }
 
 body {
@@ -197,7 +202,22 @@ button { cursor: pointer; }
   background: var(--bg);
   opacity: 0.9;
 }
-.nightbar-hint { font-size: 11.5px; color: var(--text-faint); margin-top: 4px; }
+.barscale {
+  position: relative;
+  height: 15px;
+  margin-top: 3px;
+}
+.barscale i {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  font-size: 9.5px;
+  font-style: normal;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+.nightbar-hint { font-size: 11.5px; color: var(--text-faint); margin-top: 6px; }
+.nightbar-hint b { color: var(--text-dim); font-weight: 500; }
 .nightbar-legend {
   display: flex;
   justify-content: space-between;
@@ -230,9 +250,12 @@ button { cursor: pointer; }
   overflow: hidden;
 }
 .timeinput input[type="time"] {
-  flex: 1 1 auto;
-  width: 100%;
+  /* Chrome zentriert den Inhalt eines Zeitfelds nicht über text-align.
+     Deshalb schrumpft das Feld auf seine Breite und wird per Rand zentriert. */
+  flex: 0 1 auto;
+  width: auto;
   min-width: 0;
+  margin: 0 auto;
   border: 0;
   background: transparent;
   padding: 12px 0;
@@ -281,7 +304,80 @@ button { cursor: pointer; }
   font-weight: 600;
 }
 
+/* Faktoren bearbeiten */
+.factor-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 54px;
+}
+.factor-row input[type="checkbox"] {
+  width: 22px; height: 22px; flex: 0 0 22px;
+  accent-color: var(--accent); margin: 0;
+}
+.factor-row input[type="text"] {
+  flex: 1 1 auto; min-width: 0;
+  padding: 11px 12px; font-size: 15px;
+  background: var(--bg-elev-2); border: 1px solid var(--line);
+  border-radius: var(--radius); color: var(--text);
+}
+.factor-row input[type="text"]:disabled { opacity: 0.55; }
+.factor-row .del {
+  flex: 0 0 40px; width: 40px; height: 44px;
+  border: 0; background: transparent; color: var(--text-faint); font-size: 20px;
+  border-radius: 10px;
+}
+.factor-row .del:disabled { opacity: 0.25; }
+.factor-add { display: flex; gap: 10px; margin-top: 10px; }
+.factor-add input {
+  flex: 1 1 auto; min-width: 0;
+  padding: 11px 12px; font-size: 15px;
+  background: var(--bg-elev-2); border: 1px solid var(--line);
+  border-radius: var(--radius); color: var(--text);
+}
+.factor-add button {
+  flex: 0 0 auto; padding: 0 16px; min-height: 46px;
+  border: 1px solid var(--accent); background: var(--accent-soft);
+  color: var(--accent); border-radius: var(--radius); font-size: 15px;
+}
+.factor-add button:disabled { opacity: 0.4; }
+
+/* Ankreuzfeld unter den Temperaturen */
+.checkline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  margin-top: 6px;
+  font-size: 14px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.checkline input[type="checkbox"] {
+  width: 22px; height: 22px; flex: 0 0 22px;
+  accent-color: var(--accent);
+  margin: 0;
+}
+.timeinput.is-off { opacity: 0.4; }
+.timeinput.is-off input, .timeinput.is-off .stepbtn { pointer-events: none; }
+
 /* Zahleneingabe im Stil der Uhrzeitfelder */
+.tempgroup {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+}
+.timeinput input#inTempBed,
+.timeinput input#inTempWake {
+  flex: 0 0 auto;
+  width: 3.6em;
+  text-align: right;
+}
+.timeinput input#inTempBed,
+.timeinput input#inTempWake,
 .timeinput input[type="number"] {
   flex: 1 1 auto;
   width: 100%;
@@ -302,7 +398,7 @@ button { cursor: pointer; }
 }
 .timeinput .unit {
   display: grid; place-items: center;
-  padding: 0 12px 0 2px; font-size: 14px; color: var(--text-faint);
+  padding: 0; font-size: 14px; color: var(--text-faint);
 }
 
 /* Hinweis für die kommende Nacht */

@@ -1,7 +1,7 @@
 /* Service Worker – macht die App vollständig offline nutzbar.
    Bei jeder Code-Änderung die Versionsnummer erhöhen, dann holt sich
    das Handy beim nächsten Start automatisch die neuen Dateien. */
-const VERSION = 'schlaftagebuch-v3';
+const VERSION = 'schlaftagebuch-v5';
 const ASSETS = [
   './',
   './index.html',

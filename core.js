@@ -214,6 +214,48 @@
   ];
 
   var DEFAULT_FACTORS = ['alkohol', 'sport', 'stress', 'bildschirm', 'spaetessen', 'mittagsschlaf'];
+  var MAX_FACTORS = 20;
+
+  // Der Katalog ist veränderbar: der Benutzer darf Faktoren umbenennen und
+  // eigene anlegen. Gespeichert wird immer nur die id, deshalb bleiben alte
+  // Einträge auch nach einer Umbenennung richtig zugeordnet.
+  var catalog = FACTORS.map(function (f) { return { id: f.id, label: f.label, hint: f.hint }; });
+
+  function defaultCatalog() {
+    return FACTORS.map(function (f) { return { id: f.id, label: f.label, hint: f.hint }; });
+  }
+
+  function setFactorCatalog(list) {
+    if (Array.isArray(list) && list.length) catalog = sanitizeCatalog(list);
+  }
+
+  function getFactorCatalog() { return catalog.slice(); }
+
+  function isFactorId(id) { return typeof id === 'string' && /^[a-z0-9_-]{1,32}$/i.test(id); }
+
+  function sanitizeCatalog(list) {
+    var seen = {}, out = [];
+    (list || []).forEach(function (f) {
+      if (!f || !isFactorId(f.id) || seen[f.id]) return;
+      var label = String(f.label === undefined || f.label === null ? f.id : f.label).trim().slice(0, 40);
+      if (!label) label = f.id;
+      seen[f.id] = true;
+      out.push({ id: f.id, label: label, hint: typeof f.hint === 'string' ? f.hint.slice(0, 120) : '' });
+    });
+    return out.slice(0, MAX_FACTORS);
+  }
+
+  function makeFactorId(label, existing) {
+    var base = String(label || '').toLowerCase()
+      .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+      .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 24);
+    if (!base) base = 'faktor';
+    var taken = {};
+    (existing || []).forEach(function (f) { taken[f.id] = true; });
+    var id = base, n = 2;
+    while (taken[id]) { id = base + '-' + n; n++; }
+    return id;
+  }
 
   var DEFAULT_SETTINGS = {
     goalMin: 450,          // Ziel: 7 h 30 min
@@ -222,7 +264,8 @@
     defaultWake: '06:05',
     theme: 'auto',
     factors: DEFAULT_FACTORS.slice(),
-    schemaVersion: 2
+    factorList: null,        // null bedeutet: Standardkatalog verwenden
+    schemaVersion: 3
   };
 
   // Ampelbewertung einer Nacht
@@ -240,7 +283,8 @@
   function isWeekendNight(key) { var w = weekdayIndex(key); return w === 5 || w === 6; }
 
   function factorLabel(id) {
-    for (var i = 0; i < FACTORS.length; i++) if (FACTORS[i].id === id) return FACTORS[i].label;
+    for (var i = 0; i < catalog.length; i++) if (catalog[i].id === id) return catalog[i].label;
+    for (var j = 0; j < FACTORS.length; j++) if (FACTORS[j].id === id) return FACTORS[j].label;
     return id;
   }
 
@@ -305,9 +349,8 @@
   function normalizeEntry(raw, activeFactors) {
     if (!raw || typeof raw !== 'object') return null;
     var date = String(raw.date || raw.id || '').slice(0, 10);
-    var known = FACTORS.map(function (f) { return f.id; });
     var factors = Array.isArray(raw.factors)
-      ? raw.factors.filter(function (f) { return known.indexOf(f) >= 0; })
+      ? raw.factors.filter(isFactorId).slice(0, MAX_FACTORS)
       : [];
     var e = {
       date: date,
@@ -622,7 +665,8 @@
         defaultBed: settings.defaultBed,
         defaultWake: settings.defaultWake,
         theme: settings.theme,
-        factors: settings.factors
+        factors: settings.factors,
+        factorList: settings.factorList && settings.factorList.length ? settings.factorList : catalog
       },
       entries: sortEntries(entries)
     };
@@ -703,9 +747,12 @@
       if (toMin(data.settings.defaultWake) !== null) settings.defaultWake = data.settings.defaultWake;
       if (settings.minMin && settings.goalMin && settings.minMin > settings.goalMin) settings.minMin = settings.goalMin;
       if (['auto', 'light', 'dark'].indexOf(data.settings.theme) >= 0) settings.theme = data.settings.theme;
+      if (Array.isArray(data.settings.factorList)) {
+        var list = sanitizeCatalog(data.settings.factorList);
+        if (list.length) settings.factorList = list;
+      }
       if (Array.isArray(data.settings.factors)) {
-        var known = FACTORS.map(function (f) { return f.id; });
-        settings.factors = data.settings.factors.filter(function (f) { return known.indexOf(f) >= 0; });
+        settings.factors = data.settings.factors.filter(isFactorId).slice(0, MAX_FACTORS);
         if (!settings.factors.length) delete settings.factors;
       }
     }
@@ -741,6 +788,9 @@
     sortEntries: sortEntries, lastNDays: lastNDays, summarize: summarize,
     factorComparison: factorComparison, rollingAverage: rollingAverage,
     nearestOption: nearestOption, factorLabel: factorLabel, cleanTemp: cleanTemp,
+    MAX_FACTORS: MAX_FACTORS, setFactorCatalog: setFactorCatalog, getFactorCatalog: getFactorCatalog,
+    defaultCatalog: defaultCatalog, sanitizeCatalog: sanitizeCatalog, makeFactorId: makeFactorId,
+    isFactorId: isFactorId,
     buildInsights: buildInsights, buildRecommendations: buildRecommendations,
     buildExport: buildExport, toCsv: toCsv, parseImport: parseImport
   };
