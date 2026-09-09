@@ -1,6 +1,9 @@
 /* =========================================================================
    Schlaftagebuch – Anwendungslogik
    Speichert ausschließlich lokal (localStorage). Keine Netzwerkzugriffe.
+
+   Datumslogik: Eine Nacht trägt das Datum des ABENDS, an dem man ins Bett
+   geht. Die letzte vollständige Nacht ist damit immer „gestern“.
    ========================================================================= */
 (function () {
   'use strict';
@@ -9,6 +12,7 @@
   var KEY_ENTRIES = 'schlaftagebuch.entries.v1';
   var KEY_SETTINGS = 'schlaftagebuch.settings.v1';
   var KEY_BACKUP = 'schlaftagebuch.backup.v1';
+  var KEY_PLANNED = 'schlaftagebuch.planned.v1';
 
   var $ = function (sel) { return document.querySelector(sel); };
   var $$ = function (sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); };
@@ -44,10 +48,13 @@
   var state = {
     entries: [],
     settings: {},
+    planned: null,
     view: 'night',
     date: null,
     draft: null,
     dirty: false,
+    freeLatency: false,
+    freeAwake: false,
     range: 30,
     scatterX: 'sleep',
     selectedDay: null
@@ -64,6 +71,19 @@
     if (!Array.isArray(state.settings.factors) || !state.settings.factors.length) {
       state.settings.factors = C.DEFAULT_FACTORS.slice();
     }
+    if (!isFinite(state.settings.minMin)) state.settings.minMin = C.DEFAULT_SETTINGS.minMin;
+    if (state.settings.minMin > state.settings.goalMin) state.settings.minMin = state.settings.goalMin;
+
+    // Vormerkung für eine kommende Nacht. Nur gültig, solange die Nacht
+    // nicht schon als richtiger Eintrag existiert und nicht zu alt ist.
+    var pl = readJson(KEY_PLANNED, null);
+    state.planned = (pl && C.isValidKey(pl.date) && pl.date >= C.addDays(todayKey(), -2)) ? pl : null;
+  }
+
+  function savePlanned(p) {
+    state.planned = p;
+    if (!p) { try { localStorage.removeItem(KEY_PLANNED); } catch (e) {} return true; }
+    return writeJson(KEY_PLANNED, p);
   }
 
   function saveEntries() { return writeJson(KEY_ENTRIES, C.sortEntries(state.entries)); }
@@ -143,6 +163,12 @@
   }
 
   function todayKey() { return C.dateKey(new Date()); }
+  // Letzte vollständige Nacht = gestern. Die Nacht von heute Abend lässt sich
+  // nur vormerken, deshalb reicht die Navigation einen Tag weiter.
+  function lastNight() { return C.addDays(todayKey(), -1); }
+  function maxDate() { return lastNight(); }
+  function navMax() { return todayKey(); }
+  function isPlannedDate(d) { return d === todayKey(); }
 
   function qualityWord(q) {
     if (q <= 2) return 'wie gerädert';
@@ -152,45 +178,84 @@
     return 'top erholt';
   }
 
+  function statusClass(sleepMin) {
+    var st = C.sleepStatus(sleepMin, state.settings);
+    return st === 'good' ? 'ok' : (st === 'bad' ? 'bad' : 'mid');
+  }
+  function statusColor(sleepMin) { return 'var(--' + statusClass(sleepMin) + ')'; }
+
   /* ------------------------------------------------------------ Vorgaben */
 
   function suggestDraft(date) {
     var existing = getEntry(date);
-    if (existing) return Object.assign({}, existing, { factors: (existing.factors || []).slice() });
-
-    var recent = C.sortEntries(state.entries).slice(-14);
-    var now = new Date();
-    var nowMin = now.getHours() * 60 + now.getMinutes();
-    var wake;
-    if (date === todayKey() && nowMin >= 4 * 60 && nowMin <= 13 * 60) {
-      // Morgens: fünf Minuten vor dem Öffnen der App, auf 5 Minuten gerundet.
-      // Außerhalb dieses Fensters wäre „jetzt“ als Aufstehzeit meist falsch.
-      wake = C.fromMin(Math.round((nowMin - 5) / 5) * 5);
-    } else {
-      wake = recent.length ? C.meanClockTime(recent.map(function (e) { return e.wake; })) : '07:00';
-      wake = C.fromMin(Math.round(C.toMin(wake) / 5) * 5);
+    if (existing) {
+      return Object.assign({ tempBed: null, tempWake: null }, existing,
+        { factors: (existing.factors || []).slice() });
     }
-    var bed = recent.length ? C.meanClockTime(recent.map(function (e) { return e.bed; })) : '23:00';
-    bed = C.fromMin(Math.round(C.toMin(bed) / 5) * 5);
-
-    var lat = recent.length ? C.nearestOption(C.LATENCY_OPTIONS, C.median(recent.map(function (e) { return e.latency; }))) : 10;
-    var awk = recent.length ? C.nearestOption(C.AWAKE_OPTIONS, C.median(recent.map(function (e) { return e.awake; }))) : 0;
-    var qual = recent.length ? Math.round(C.median(recent.map(function (e) { return e.quality; }))) : 6;
-
-    return { date: date, bed: bed, wake: wake, latency: lat, awake: awk, quality: qual, factors: [], note: '' };
+    var d = {
+      date: date,
+      bed: state.settings.defaultBed || '22:30',
+      wake: state.settings.defaultWake || '06:05',
+      latency: C.LATENCY_OPTIONS[0].value,
+      awake: C.AWAKE_OPTIONS[0].value,
+      quality: 7,
+      tempBed: null,
+      tempWake: null,
+      factors: [],
+      note: ''
+    };
+    // Was am Vorabend vorgemerkt wurde, steht am nächsten Morgen schon da
+    var p = state.planned;
+    if (p && p.date === date) {
+      if (C.toMin(p.bed) !== null) d.bed = p.bed;
+      if (Array.isArray(p.factors)) d.factors = p.factors.slice();
+      if (p.tempBed !== null && p.tempBed !== undefined) d.tempBed = p.tempBed;
+      if (typeof p.note === 'string') d.note = p.note;
+    }
+    return d;
   }
 
   /* ------------------------------------------------------- Ansicht Nacht */
 
-  function buildSegmented(container, options, getValue, setValue) {
+  // Segmentierte Auswahl mit drei Vorgaben plus freier Minuteneingabe
+  function buildChoice(container, boxSel, inputSel, options, freeFlag, getValue, setValue) {
     container.innerHTML = '';
+    var cur = getValue();
+    var isPreset = options.some(function (o) { return o.value === cur; });
+    var freeOn = state[freeFlag] || !isPreset;
+
     options.forEach(function (opt) {
-      var b = el('button', {
-        type: 'button', text: opt.label, 'aria-pressed': String(getValue() === opt.value),
-        onclick: function () { setValue(opt.value); touch(); renderNight(); }
-      });
-      container.appendChild(b);
+      container.appendChild(el('button', {
+        type: 'button', text: opt.label,
+        'aria-pressed': String(!freeOn && cur === opt.value),
+        onclick: function () {
+          setValue(opt.value);
+          state[freeFlag] = false;
+          touch();
+          renderNight();
+        }
+      }));
     });
+
+    container.appendChild(el('button', {
+      type: 'button',
+      text: isPreset ? 'freie Eingabe' : cur + ' min',
+      'aria-pressed': String(freeOn),
+      onclick: function () {
+        state[freeFlag] = true;
+        renderNight();
+        var inp = $(inputSel);
+        if (inp) { inp.focus(); inp.select && inp.select(); }
+      }
+    }));
+
+    var box = $(boxSel), input = $(inputSel);
+    if (freeOn) {
+      box.hidden = false;
+      if (document.activeElement !== input) input.value = cur;
+    } else {
+      box.hidden = true;
+    }
   }
 
   function buildChips() {
@@ -217,63 +282,75 @@
 
   function renderNight() {
     var d = state.draft;
-    var isToday = state.date === todayKey();
-    var isYesterday = state.date === C.addDays(todayKey(), -1);
-    $('#dayTitle').textContent = isToday ? 'Letzte Nacht' : (isYesterday ? 'Vorletzte Nacht' : C.formatDate(state.date, 'short').slice(0, -1));
-    $('#daySub').textContent = C.formatDate(state.date, 'long');
-    $('#dayNext').disabled = state.date >= todayKey();
+    var planned = isPlannedDate(state.date);
+    var isLast = state.date === lastNight();
+    var isBefore = state.date === C.addDays(lastNight(), -1);
+    $('#dayTitle').textContent = planned ? 'Kommende Nacht'
+      : (isLast ? 'Letzte Nacht' : (isBefore ? 'Vorletzte Nacht' : 'Nacht auf ' + C.formatDate(C.addDays(state.date, 1), 'short')));
+    $('#daySub').textContent = C.formatDate(state.date, 'long') +
+      ' → ' + C.formatDate(C.addDays(state.date, 1), 'short');
+    $('#dayNext').disabled = state.date >= navMax();
+    $('#dayPrev').disabled = false;
+    var picker = $('#datePicker');
+    picker.max = navMax();
+    if (picker.value !== state.date) picker.value = state.date;
+
+    // Im Vormerkmodus gibt es nur, was am Abend schon feststeht
+    $('#plannedNote').hidden = !planned;
+    $('#hero').hidden = planned;
+    ['#cellWake', '#cellTempWake', '#fieldLatency', '#fieldAwake', '#fieldQuality'].forEach(function (sel) {
+      $(sel).hidden = planned;
+    });
 
     $('#inBed').value = d.bed;
     $('#inWake').value = d.wake;
     $('#inQuality').value = d.quality;
     $('#qualVal').textContent = d.quality;
     $('#qualWord').textContent = ' · ' + qualityWord(d.quality);
-    $('#inNote').value = d.note || '';
+    if (document.activeElement !== $('#inNote')) $('#inNote').value = d.note || '';
+    if (document.activeElement !== $('#inTempBed')) $('#inTempBed').value = d.tempBed === null || d.tempBed === undefined ? '' : d.tempBed;
+    if (document.activeElement !== $('#inTempWake')) $('#inTempWake').value = d.tempWake === null || d.tempWake === undefined ? '' : d.tempWake;
 
-    buildSegmented($('#segLatency'), C.LATENCY_OPTIONS,
+    buildChoice($('#segLatency'), '#freeLatency', '#inLatency', C.LATENCY_OPTIONS, 'freeLatency',
       function () { return d.latency; }, function (v) { d.latency = v; });
-    buildSegmented($('#segAwake'), C.AWAKE_OPTIONS,
+    buildChoice($('#segAwake'), '#freeAwake', '#inAwake', C.AWAKE_OPTIONS, 'freeAwake',
       function () { return d.awake; }, function (v) { d.awake = v; });
     buildChips();
 
     // Hero
     var der = C.derive(d);
-    var goal = state.settings.goalMin;
+    var goal = state.settings.goalMin, minimum = state.settings.minMin;
+    var bar = $('#nightBar');
+    bar.innerHTML = '';
     if (der && der.timeInBed > 0 && der.timeInBed <= 16 * 60) {
       var h = Math.floor(der.sleep / 60), m = der.sleep % 60;
       $('#heroNum').textContent = h + ':' + String(m).padStart(2, '0');
-      $('#heroUnit').textContent = 'h geschlafen';
-      var diff = der.sleep - goal;
-      $('#heroCaption').innerHTML = '<strong>' + C.formatDuration(der.timeInBed) + '</strong> im Bett · ' +
-        Math.round(der.efficiency * 100) + ' % davon geschlafen · ' +
-        (Math.abs(diff) < 5 ? 'genau am Ziel'
-          : (diff > 0 ? C.formatDuration(diff) + ' über dem Ziel' : C.formatDuration(-diff) + ' unter dem Ziel'));
+      $('#heroNum').className = 'hero-num v-' + statusClass(der.sleep);
+      $('#heroUnit').textContent = 'h';
 
-      // Nachtbalken
-      var bar = $('#nightBar');
-      bar.innerHTML = '';
       var total = der.timeInBed;
-      function seg(cls, min, label) {
+      function seg(cls, min) {
         if (min <= 0) return;
-        bar.appendChild(el('div', { class: 'seg ' + cls, style: 'width:' + (min / total * 100) + '%', title: label }));
+        bar.appendChild(el('div', { class: 'seg ' + cls, style: 'width:' + (min / total * 100) + '%' }));
       }
-      seg('seg-idle', der.latency, 'Einschlafen');
-      seg('seg-sleep', der.sleep, 'Schlaf');
-      seg('seg-idle', der.awake, 'wach gelegen');
-      if (goal < total) {
-        bar.appendChild(el('div', { class: 'goalmark', style: 'left:' + (goal / total * 100) + '%' }));
-      }
+      seg('seg-idle', der.latency);
+      seg('seg-sleep is-' + statusClass(der.sleep), der.sleep);
+      seg('seg-idle', der.awake);
+      [minimum, goal].forEach(function (v) {
+        if (v > 0 && v < total) bar.appendChild(el('div', { class: 'mark', style: 'left:' + (v / total * 100) + '%' }));
+      });
       $('#legendBed').textContent = d.bed + ' Uhr';
       $('#legendWake').textContent = d.wake + ' Uhr';
     } else {
       $('#heroNum').textContent = '–';
+      $('#heroNum').className = 'hero-num';
       $('#heroUnit').textContent = '';
-      $('#heroCaption').textContent = 'Bitte Zeiten prüfen.';
-      $('#nightBar').innerHTML = '';
+      $('#legendBed').textContent = '–';
+      $('#legendWake').textContent = '–';
     }
 
     // Warnungen und Fehler
-    var v = C.validateEntry(d);
+    var v = planned ? { ok: true, errors: [], warnings: [] } : C.validateEntry(d);
     var box = $('#entryWarnings');
     box.innerHTML = '';
     var msgs = v.errors.concat(v.warnings);
@@ -283,15 +360,39 @@
     }
 
     var exists = !!getEntry(state.date);
-    $('#btnSave').textContent = exists ? 'Änderungen speichern' : 'Nacht speichern';
-    $('#btnDeleteEntry').style.display = exists ? '' : 'none';
+    if (planned) {
+      var hasPlan = !!(state.planned && state.planned.date === state.date);
+      $('#btnSave').textContent = hasPlan ? 'Vormerkung aktualisieren' : 'Für heute Nacht vormerken';
+      $('#btnDeleteEntry').textContent = 'Vormerkung löschen';
+      $('#btnDeleteEntry').style.display = hasPlan ? '' : 'none';
+      $('#entryWarnings').innerHTML = '';
+    } else {
+      $('#btnSave').textContent = exists ? 'Änderungen speichern' : 'Nacht speichern';
+      $('#btnDeleteEntry').textContent = 'Diesen Eintrag löschen';
+      $('#btnDeleteEntry').style.display = exists ? '' : 'none';
+    }
   }
 
   function saveDraft() {
+    if (isPlannedDate(state.date)) {
+      savePlanned({
+        date: state.date,
+        bed: state.draft.bed,
+        tempBed: state.draft.tempBed === undefined ? null : state.draft.tempBed,
+        factors: (state.draft.factors || []).slice(),
+        note: state.draft.note || ''
+      });
+      state.dirty = false;
+      renderNight();
+      toast('Für heute Nacht vorgemerkt');
+      return;
+    }
     var d = Object.assign({}, state.draft, { updatedAt: new Date().toISOString() });
     var v = C.validateEntry(d);
     if (!v.ok) { toast(v.errors[0], true); renderNight(); return; }
     if (!upsertEntry(C.normalizeEntry(d))) return;
+    // Eine eingetragene Nacht braucht ihre Vormerkung nicht mehr
+    if (state.planned && state.planned.date === d.date) savePlanned(null);
     state.dirty = false;
     var der = C.derive(d);
     toast('Gespeichert · ' + C.formatDuration(der.sleep) + ' Schlaf');
@@ -310,100 +411,140 @@
     return n;
   }
 
-  /**
-   * Hauptdiagramm: Schlafdauer als Balken, Ziel als Linie,
-   * 7-Tage-Mittel als Linie, Schlafqualität als Punkte auf zweiter Achse.
-   */
-  function mainChart(days) {
-    var today = todayKey();
-    var from = C.addDays(today, -(days - 1));
-    var dates = C.dateRange(from, today);
+  // Reihe für den sichtbaren Zeitraum plus Vorlauf für den gleitenden Schnitt
+  function buildSeries(days, lead) {
+    var end = maxDate();
+    var from = C.addDays(end, -(days - 1 + lead));
+    var dates = C.dateRange(from, end);
     var byDate = {};
     state.entries.forEach(function (e) { byDate[e.date] = e; });
-
-    var series = dates.map(function (dt) {
+    return dates.map(function (dt) {
       var e = byDate[dt];
       var der = e ? C.derive(e) : null;
       return { date: dt, value: der ? der.sleep : null, quality: e ? e.quality : null, entry: e };
     });
-    var roll = C.rollingAverage(series, 7);
-    var goal = state.settings.goalMin;
+  }
 
-    var W = 360, H = 208, padL = 30, padR = 24, padT = 12, padB = 20;
+  var AVG_WINDOW = 5;
+
+  function durationChart(days) {
+    var lead = AVG_WINDOW - 1;
+    var full = buildSeries(days, lead);
+    var rollFull = C.rollingAverage(full, AVG_WINDOW);
+    var series = full.slice(lead);
+    var roll = rollFull.slice(lead);
+
+    var goal = state.settings.goalMin, minimum = state.settings.minMin;
+    var W = 360, H = 210, padL = 26, padR = 10, padT = 10, padB = 20;
     var innerW = W - padL - padR, innerH = H - padT - padB;
     var maxVal = Math.max(goal, 60);
     series.forEach(function (p) { if (p.value !== null) maxVal = Math.max(maxVal, p.value); });
-    var yMax = Math.ceil((maxVal + 20) / 60) * 60;
+    roll.forEach(function (p) { if (p.value !== null) maxVal = Math.max(maxVal, p.value); });
+    var yMax = Math.ceil((maxVal + 15) / 60) * 60;
     var y = function (v) { return padT + innerH - (v / yMax) * innerH; };
-    var yQ = function (q) { return padT + innerH - ((q - 0.5) / 10) * innerH; };
-    var slot = innerW / dates.length;
+    var slot = innerW / series.length;
     var bw = Math.max(2, Math.min(slot * 0.62, 22));
     var x = function (i) { return padL + slot * i + slot / 2; };
 
     var svg = s('svg', { class: 'chart', viewBox: '0 0 ' + W + ' ' + H, role: 'img',
-      'aria-label': 'Schlafdauer der letzten ' + days + ' Tage' });
+      'aria-label': 'Schlafdauer der letzten ' + days + ' Nächte' });
 
-    // Stundenraster
-    for (var hv = 0; hv <= yMax; hv += 120) {
+    // Stundenraster in 1-h-Schritten
+    for (var hv = 0; hv <= yMax; hv += 60) {
       svg.appendChild(s('line', { x1: padL, x2: W - padR, y1: y(hv), y2: y(hv),
         stroke: 'var(--line-soft)', 'stroke-width': 1 }));
-      svg.appendChild(s('text', { x: padL - 5, y: y(hv) + 3.5, 'text-anchor': 'end',
-        'font-size': 9.5, fill: 'var(--text-faint)', text: (hv / 60) + 'h' }));
+      svg.appendChild(s('text', { x: padL - 4, y: y(hv) + 3.5, 'text-anchor': 'end',
+        'font-size': 9, fill: 'var(--text-faint)', text: (hv / 60) + 'h' }));
     }
 
-    // Balken
     series.forEach(function (p, i) {
       if (p.value === null) return;
-      var hgt = Math.max(1.5, (p.value / yMax) * innerH);
       svg.appendChild(s('rect', {
-        x: x(i) - bw / 2, y: y(p.value), width: bw, height: hgt, rx: Math.min(3, bw / 2),
-        fill: p.value >= goal ? 'var(--accent)' : 'var(--bar)',
-        opacity: state.selectedDay && state.selectedDay !== p.date ? 0.45 : 1
+        x: x(i) - bw / 2, y: y(p.value), width: bw, height: Math.max(1.5, (p.value / yMax) * innerH),
+        rx: Math.min(3, bw / 2), fill: statusColor(p.value),
+        opacity: state.selectedDay && state.selectedDay !== p.date ? 0.4 : 1
       }));
     });
 
-    // Ziel-Linie
+    // Ziel- und Minimum-Linie
     svg.appendChild(s('line', { x1: padL, x2: W - padR, y1: y(goal), y2: y(goal),
-      stroke: 'var(--text)', 'stroke-width': 1.2, 'stroke-dasharray': '5 4', opacity: 0.65 }));
+      stroke: 'var(--ok)', 'stroke-width': 1.3, 'stroke-dasharray': '5 4', opacity: 0.9 }));
+    svg.appendChild(s('line', { x1: padL, x2: W - padR, y1: y(minimum), y2: y(minimum),
+      stroke: 'var(--bad)', 'stroke-width': 1.3, 'stroke-dasharray': '2 4', opacity: 0.85 }));
 
-    // 7-Tage-Mittel
+    // Gleitender Schnitt
     var path = '', started = false;
     roll.forEach(function (p, i) {
       if (p.value === null) { started = false; return; }
       path += (started ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(p.value).toFixed(1) + ' ';
       started = true;
     });
-    if (path) svg.appendChild(s('path', { d: path, fill: 'none', stroke: 'var(--text)', 'stroke-width': 1.6, opacity: 0.55 }));
+    if (path) svg.appendChild(s('path', { d: path, fill: 'none', stroke: 'var(--text)', 'stroke-width': 1.8, opacity: 0.7 }));
 
-    // Qualität
+    addXLabels(svg, series, x, H, days);
+    addHitAreas(svg, series, padL, slot, padT, innerH);
+    return svg;
+  }
+
+  function qualityChart(days) {
+    var lead = AVG_WINDOW - 1;
+    var full = buildSeries(days, lead);
+    var qFull = C.rollingAverage(full.map(function (p) { return { date: p.date, value: p.quality }; }), AVG_WINDOW);
+    var series = full.slice(lead);
+    var roll = qFull.slice(lead);
+
+    var W = 360, H = 150, padL = 26, padR = 10, padT = 10, padB = 20;
+    var innerW = W - padL - padR, innerH = H - padT - padB;
+    var y = function (q) { return padT + innerH - ((q - 0.5) / 10) * innerH; };
+    var slot = innerW / series.length;
+    var x = function (i) { return padL + slot * i + slot / 2; };
+
+    var svg = s('svg', { class: 'chart', viewBox: '0 0 ' + W + ' ' + H, role: 'img',
+      'aria-label': 'Schlafqualität der letzten ' + days + ' Nächte' });
+
+    [2, 4, 6, 8, 10].forEach(function (q) {
+      svg.appendChild(s('line', { x1: padL, x2: W - padR, y1: y(q), y2: y(q), stroke: 'var(--line-soft)', 'stroke-width': 1 }));
+      svg.appendChild(s('text', { x: padL - 4, y: y(q) + 3.5, 'text-anchor': 'end', 'font-size': 9,
+        fill: 'var(--text-faint)', text: String(q) }));
+    });
+
     var qpath = '', qs = false;
     series.forEach(function (p, i) {
       if (p.quality === null) { qs = false; return; }
-      qpath += (qs ? 'L' : 'M') + x(i).toFixed(1) + ' ' + yQ(p.quality).toFixed(1) + ' ';
+      qpath += (qs ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(p.quality).toFixed(1) + ' ';
       qs = true;
     });
-    if (qpath) svg.appendChild(s('path', { d: qpath, fill: 'none', stroke: 'var(--data)', 'stroke-width': 1.4, opacity: 0.85 }));
+    if (qpath) svg.appendChild(s('path', { d: qpath, fill: 'none', stroke: 'var(--data)', 'stroke-width': 1.5, opacity: 0.85 }));
     if (days <= 31) {
       series.forEach(function (p, i) {
         if (p.quality === null) return;
-        svg.appendChild(s('circle', { cx: x(i), cy: yQ(p.quality), r: 2.4, fill: 'var(--data)' }));
+        svg.appendChild(s('circle', { cx: x(i), cy: y(p.quality), r: 2.6, fill: 'var(--data)',
+          opacity: state.selectedDay && state.selectedDay !== p.date ? 0.4 : 1 }));
       });
     }
-    // Rechte Achse
-    [2, 6, 10].forEach(function (q) {
-      svg.appendChild(s('text', { x: W - padR + 4, y: yQ(q) + 3.5, 'font-size': 9.5,
-        fill: 'var(--data)', text: String(q) }));
+    var rpath = '', rs = false;
+    roll.forEach(function (p, i) {
+      if (p.value === null) { rs = false; return; }
+      rpath += (rs ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(p.value).toFixed(1) + ' ';
+      rs = true;
     });
+    if (rpath) svg.appendChild(s('path', { d: rpath, fill: 'none', stroke: 'var(--text)', 'stroke-width': 1.6, opacity: 0.55 }));
 
-    // Datumsbeschriftung
+    addXLabels(svg, series, x, H, days);
+    addHitAreas(svg, series, padL, slot, padT, innerH);
+    return svg;
+  }
+
+  function addXLabels(svg, series, x, H, days) {
     var step = days <= 10 ? 1 : (days <= 31 ? 5 : 15);
-    dates.forEach(function (dt, i) {
-      if ((dates.length - 1 - i) % step !== 0) return;
+    series.forEach(function (p, i) {
+      if ((series.length - 1 - i) % step !== 0) return;
       svg.appendChild(s('text', { x: x(i), y: H - 6, 'text-anchor': 'middle', 'font-size': 9,
-        fill: 'var(--text-faint)', text: C.formatDate(dt, 'short') }));
+        fill: 'var(--text-faint)', text: C.formatDate(p.date, 'short') }));
     });
+  }
 
-    // Tippflächen
+  function addHitAreas(svg, series, padL, slot, padT, innerH) {
     series.forEach(function (p, i) {
       var r = s('rect', { x: padL + slot * i, y: padT, width: slot, height: innerH, fill: 'transparent' });
       r.style.cursor = 'pointer';
@@ -413,8 +554,6 @@
       });
       svg.appendChild(r);
     });
-
-    return svg;
   }
 
   function scatterChart() {
@@ -424,7 +563,7 @@
     var xs = items.map(function (it) { return useSleep ? it.d.sleep : C.toNightAxis(C.toMin(it.bed)); });
     var ys = items.map(function (it) { return it.quality; });
 
-    var W = 360, H = 180, padL = 30, padR = 12, padT = 10, padB = 24;
+    var W = 360, H = 180, padL = 26, padR = 12, padT = 10, padB = 24;
     var innerW = W - padL - padR, innerH = H - padT - padB;
     var xMin = Math.min.apply(null, xs), xMax = Math.max.apply(null, xs);
     if (xMax - xMin < 30) { xMin -= 30; xMax += 30; }
@@ -436,7 +575,7 @@
 
     [2, 4, 6, 8, 10].forEach(function (q) {
       svg.appendChild(s('line', { x1: padL, x2: W - padR, y1: py(q), y2: py(q), stroke: 'var(--line-soft)', 'stroke-width': 1 }));
-      svg.appendChild(s('text', { x: padL - 5, y: py(q) + 3.5, 'text-anchor': 'end', 'font-size': 9.5, fill: 'var(--text-faint)', text: String(q) }));
+      svg.appendChild(s('text', { x: padL - 4, y: py(q) + 3.5, 'text-anchor': 'end', 'font-size': 9, fill: 'var(--text-faint)', text: String(q) }));
     });
 
     xs.forEach(function (v, i) {
@@ -507,13 +646,22 @@
     ]);
   }
 
+  function rangeTabs() {
+    var tabs = el('div', { class: 'tabs' });
+    [10, 30, 90].forEach(function (r) {
+      tabs.appendChild(el('button', { type: 'button', text: r + ' Tage', 'aria-pressed': String(state.range === r),
+        onclick: function () { state.range = r; state.selectedDay = null; renderStats(); } }));
+    });
+    return tabs;
+  }
+
   function renderStats() {
     var body = $('#statsBody');
     body.innerHTML = '';
-    var goal = state.settings.goalMin;
+    var goal = state.settings.goalMin, minimum = state.settings.minMin;
     var n = state.entries.length;
     $('#statsSub').textContent = n === 0 ? 'Noch keine Nächte erfasst'
-      : n + (n === 1 ? ' Nacht erfasst' : ' Nächte erfasst') + ' · Ziel ' + C.formatDuration(goal);
+      : n + (n === 1 ? ' Nacht erfasst' : ' Nächte erfasst') + ' · Ziel ' + C.formatDuration(goal, { short: true });
 
     if (n === 0) {
       body.appendChild(el('div', { class: 'empty' }, [
@@ -525,16 +673,74 @@
       return;
     }
 
-    // --- Letzte Nacht --------------------------------------------------
+    // --- 1. Schlafdauer ---------------------------------------------------
+    var durCard = el('div', { class: 'card' }, [el('h2', { text: 'Schlafdauer' })]);
+    durCard.appendChild(rangeTabs());
+    durCard.appendChild(el('div', { class: 'chart-wrap' }, [durationChart(state.range)]));
+    durCard.appendChild(el('div', { class: 'legend', html:
+      '<span><i class="swatch" style="background:var(--ok)"></i>Ziel erreicht</span>' +
+      '<span><i class="swatch" style="background:var(--mid)"></i>dazwischen</span>' +
+      '<span><i class="swatch" style="background:var(--bad)"></i>unter Minimum</span>' +
+      '<span><i class="swatch swatch-line" style="background:var(--text);opacity:.7"></i>5-Tages-Schnitt</span>' }));
+
+    var readout = el('div', { class: 'readout' });
+    if (state.selectedDay) {
+      var e = getEntry(state.selectedDay);
+      if (e) {
+        var de = C.derive(e);
+        readout.innerHTML = '<strong>' + C.formatDate(state.selectedDay, 'long') + '</strong><br>' +
+          C.formatDuration(de.sleep) + ' Schlaf · Qualität ' + e.quality + '/10 · ' + e.bed + '–' + e.wake +
+          ' · ' + C.formatDuration(de.latency) + ' Einschlafen, ' + C.formatDuration(de.awake) + ' wach' +
+          (e.tempBed !== null && e.tempBed !== undefined ? ' · ' + e.tempBed + ' °C' +
+            (e.tempWake !== null && e.tempWake !== undefined ? ' → ' + e.tempWake + ' °C' : '') : '') +
+          ((e.factors || []).length ? '<br>' + e.factors.map(C.factorLabel).join(' · ') : '');
+      } else {
+        readout.innerHTML = '<strong>' + C.formatDate(state.selectedDay, 'long') + '</strong><br>Kein Eintrag für diese Nacht.';
+      }
+    } else {
+      readout.textContent = 'Tippe auf einen Balken im Diagramm, um die Details der Nacht zu sehen';
+    }
+    durCard.appendChild(readout);
+    body.appendChild(durCard);
+
+    // --- 2. Schlafqualität ------------------------------------------------
+    var qCard = el('div', { class: 'card' }, [el('h2', { text: 'Schlafqualität' })]);
+    qCard.appendChild(el('div', { class: 'chart-wrap' }, [qualityChart(state.range)]));
+    qCard.appendChild(el('div', { class: 'legend', html:
+      '<span><i class="swatch swatch-line" style="background:var(--data)"></i>Bewertung pro Nacht</span>' +
+      '<span><i class="swatch swatch-line" style="background:var(--text);opacity:.55"></i>5-Tages-Schnitt</span>' }));
+    body.appendChild(qCard);
+
+    // --- 3. Kennzahlen zum gewählten Zeitraum -----------------------------
+    var win = C.lastNDays(state.entries, state.range, maxDate());
+    var st = C.summarize(win, goal);
+    var kCard = el('div', { class: 'card' }, [el('h2', { text: 'Überblick · letzte ' + state.range + ' Tage' })]);
+    if (st.count) {
+      kCard.appendChild(el('div', { class: 'statgrid' }, [
+        statBlock('Ø Schlafdauer', C.formatDuration(st.avgSleep),
+          (st.avgSleep >= goal ? '+' : '−') + C.formatDuration(Math.abs(st.avgSleep - goal)) + ' zum Ziel',
+          'v-' + statusClass(st.avgSleep)),
+        statBlock('Ø Schlafqualität', st.avgQuality.toFixed(1) + ' <small>/ 10</small>', qualityWord(st.avgQuality)),
+        statBlock('Nächte erfasst', st.count + ' <small>von ' + state.range + '</small>',
+          Math.round(st.count / state.range * 100) + ' % lückenlos'),
+        statBlock('Ziel erreicht', st.goalHit + ' <small>von ' + st.count + '</small>',
+          st.items.filter(function (x) { return x.d.sleep < minimum; }).length + ' Nächte unter Minimum')
+      ]));
+    } else {
+      kCard.appendChild(el('p', { class: 'note-small', text: 'In diesem Zeitraum liegen keine Einträge vor.' }));
+    }
+    body.appendChild(kCard);
+
+    // --- 4. Letzte Nacht --------------------------------------------------
     var last = C.sortEntries(state.entries)[state.entries.length - 1];
     var lastD = C.derive(last);
     var lastCard = el('div', { class: 'card' }, [
-      el('h2', { text: C.daysBetween(last.date, todayKey()) === 0 ? 'Letzte Nacht' : 'Zuletzt erfasst · ' + C.formatDate(last.date, 'short') })
+      el('h2', { text: last.date === maxDate() ? 'Letzte Nacht' : 'Zuletzt erfasst · Nacht auf ' + C.formatDate(C.addDays(last.date, 1), 'short') })
     ]);
     lastCard.appendChild(el('div', { class: 'statgrid' }, [
       statBlock('Geschlafen', C.formatDuration(lastD.sleep),
         (lastD.sleep >= goal ? '+' : '−') + C.formatDuration(Math.abs(lastD.sleep - goal)) + ' zum Ziel',
-        lastD.sleep >= goal ? 'v-good' : 'v-warn'),
+        'v-' + statusClass(lastD.sleep)),
       statBlock('Qualität', last.quality + ' <small>/ 10</small>', qualityWord(last.quality)),
       statBlock('Im Bett', last.bed + ' – ' + last.wake, C.formatDuration(lastD.timeInBed) + ' insgesamt'),
       statBlock('Effizienz', Math.round(lastD.efficiency * 100) + ' <small>%</small>',
@@ -542,47 +748,42 @@
     ]));
     body.appendChild(lastCard);
 
-    // --- Zeitraum-Karten ----------------------------------------------
-    [7, 30].forEach(function (win) {
-      var sub = C.lastNDays(state.entries, win, todayKey());
-      var st = C.summarize(sub, goal);
+    // --- 5. Sieben und dreißig Tage --------------------------------------
+    [7, 30].forEach(function (winDays) {
+      var sub = C.lastNDays(state.entries, winDays, maxDate());
+      var w = C.summarize(sub, goal);
       var card = el('div', { class: 'card' }, [
-        el('h2', { text: 'Letzte ' + win + ' Tage · ' + st.count + ' Nächte erfasst' })
+        el('h2', { text: 'Letzte ' + winDays + ' Tage · ' + w.count + ' Nächte erfasst' })
       ]);
-      if (!st.count) {
+      if (!w.count) {
         card.appendChild(el('p', { class: 'note-small', text: 'In diesem Zeitraum liegen keine Einträge vor.' }));
         body.appendChild(card);
         return;
       }
-      var grid = el('div', { class: 'statgrid' }, [
-        statBlock('Ø Schlafdauer', C.formatDuration(st.avgSleep),
-          (st.avgSleep >= goal ? '+' : '−') + C.formatDuration(Math.abs(st.avgSleep - goal)) + ' zum Ziel',
-          st.avgSleep >= goal ? 'v-good' : 'v-warn'),
-        statBlock('Ø Qualität', st.avgQuality.toFixed(1) + ' <small>/ 10</small>', qualityWord(st.avgQuality)),
-        statBlock('Ziel erreicht', st.goalHit + ' <small>von ' + st.count + '</small>',
-          Math.round(st.goalRate * 100) + ' % der Nächte'),
-        statBlock('Ø ins Bett', st.meanBed,
-          st.bedSd === null ? '' : 'schwankt ± ' + Math.round(st.bedSd) + ' min')
-      ]);
-      card.appendChild(grid);
+      card.appendChild(el('div', { class: 'statgrid' }, [
+        statBlock('Ø Schlafdauer', C.formatDuration(w.avgSleep),
+          (w.avgSleep >= goal ? '+' : '−') + C.formatDuration(Math.abs(w.avgSleep - goal)) + ' zum Ziel',
+          'v-' + statusClass(w.avgSleep)),
+        statBlock('Ø Qualität', w.avgQuality.toFixed(1) + ' <small>/ 10</small>', qualityWord(w.avgQuality)),
+        statBlock('Ziel erreicht', w.goalHit + ' <small>von ' + w.count + '</small>',
+          Math.round(w.goalRate * 100) + ' % der Nächte'),
+        statBlock('Ø ins Bett', w.meanBed, w.bedSd === null ? '' : 'schwankt ± ' + Math.round(w.bedSd) + ' min')
+      ]));
 
-      if (win === 30) {
-        // Trend: zweite Hälfte gegen erste Hälfte
-        var half = C.lastNDays(state.entries, 15, todayKey());
-        var prevFrom = C.addDays(todayKey(), -29), prevTo = C.addDays(todayKey(), -15);
+      if (winDays === 30) {
+        var half = C.lastNDays(state.entries, 15, maxDate());
+        var prevFrom = C.addDays(maxDate(), -29), prevTo = C.addDays(maxDate(), -15);
         var prev = state.entries.filter(function (e) { return e.date >= prevFrom && e.date <= prevTo; });
         if (half.length >= 5 && prev.length >= 5) {
           var a = C.summarize(half, goal).avgSleep, b = C.summarize(prev, goal).avgSleep;
           var delta = a - b;
           card.appendChild(el('div', { class: 'stat', style: 'margin-top:14px' }, [
             el('div', { class: 'k', text: 'Trend' }),
-            el('div', { class: 'v', html: (delta >= 0 ? '+' : '−') + C.formatDuration(Math.abs(delta)),
-              'data-x': '' }),
-            el('div', { class: 'd', text: 'letzte 15 Tage gegenüber den 15 Tagen davor' })
+            el('div', { class: 'v', text: (delta >= 0 ? '+' : '−') + C.formatDuration(Math.abs(delta)) }),
+            el('div', { class: 'd', text: 'letzte 15 Nächte gegenüber den 15 davor' })
           ]));
         }
-        var debtDays = C.lastNDays(state.entries, 14, todayKey());
-        var debt = C.summarize(debtDays, goal).debt;
+        var debt = C.summarize(C.lastNDays(state.entries, 14, maxDate()), goal).debt;
         card.appendChild(el('p', { class: 'note-small',
           text: debt > 0
             ? 'Rechnerisch fehlen dir über die letzten 14 Tage ' + C.formatDuration(debt) + ' gegenüber deinem Ziel. ' +
@@ -592,43 +793,8 @@
       body.appendChild(card);
     });
 
-    // --- Hauptdiagramm --------------------------------------------------
-    var chartCard = el('div', { class: 'card' });
-    chartCard.appendChild(el('h2', { text: 'Schlafdauer und Qualität' }));
-    var tabs = el('div', { class: 'tabs' });
-    [10, 30, 90].forEach(function (r) {
-      tabs.appendChild(el('button', { type: 'button', text: r + ' Tage', 'aria-pressed': String(state.range === r),
-        onclick: function () { state.range = r; state.selectedDay = null; renderStats(); } }));
-    });
-    chartCard.appendChild(tabs);
-    var wrap = el('div', { class: 'chart-wrap' });
-    wrap.appendChild(mainChart(state.range));
-    chartCard.appendChild(wrap);
-    chartCard.appendChild(el('div', { class: 'legend', html:
-      '<span><i class="swatch" style="background:var(--accent)"></i>Ziel erreicht</span>' +
-      '<span><i class="swatch" style="background:var(--bar)"></i>unter Ziel</span>' +
-      '<span><i class="swatch swatch-line" style="background:var(--text);opacity:.55"></i>7-Tage-Mittel</span>' +
-      '<span><i class="swatch swatch-line" style="background:var(--data)"></i>Qualität (rechte Achse)</span>' }));
-
-    var readout = el('div', { class: 'readout' });
-    if (state.selectedDay) {
-      var e = getEntry(state.selectedDay);
-      if (e) {
-        var de = C.derive(e);
-        readout.innerHTML = '<strong>' + C.formatDate(e.date, 'long') + '</strong><br>' +
-          C.formatDuration(de.sleep) + ' Schlaf · Qualität ' + e.quality + '/10 · ' + e.bed + '–' + e.wake +
-          ((e.factors || []).length ? '<br>' + e.factors.map(C.factorLabel).join(' · ') : '');
-      } else {
-        readout.innerHTML = '<strong>' + C.formatDate(state.selectedDay, 'long') + '</strong><br>Kein Eintrag für diese Nacht.';
-      }
-    } else {
-      readout.textContent = 'Tippe auf einen Tag im Diagramm, um die Nacht zu sehen.';
-    }
-    chartCard.appendChild(readout);
-    body.appendChild(chartCard);
-
-    // --- Erkenntnisse ---------------------------------------------------
-    var insights = C.buildInsights(state.entries, state.settings, todayKey());
+    // --- 6. Erkenntnisse --------------------------------------------------
+    var insights = C.buildInsights(state.entries, state.settings, maxDate());
     if (insights.length) {
       var ic = el('div', { class: 'card' }, [el('h2', { text: 'Was in deinen Daten steht' })]);
       insights.forEach(function (i) {
@@ -640,8 +806,8 @@
       body.appendChild(ic);
     }
 
-    // --- Empfehlungen ---------------------------------------------------
-    var recs = C.buildRecommendations(state.entries, state.settings, todayKey());
+    // --- 7. Empfehlungen --------------------------------------------------
+    var recs = C.buildRecommendations(state.entries, state.settings, maxDate());
     if (recs.length) {
       var rc = el('div', { class: 'card' }, [el('h2', { text: 'Wo du ansetzen könntest' })]);
       recs.forEach(function (r) {
@@ -652,7 +818,7 @@
       body.appendChild(rc);
     }
 
-    // --- Faktorvergleich -------------------------------------------------
+    // --- 8. Faktorvergleich ------------------------------------------------
     var fc = factorChart();
     if (fc) {
       var fcard = el('div', { class: 'card' }, [el('h2', { text: 'Qualität mit und ohne Faktor' })]);
@@ -665,7 +831,7 @@
       body.appendChild(fcard);
     }
 
-    // --- Streudiagramm ---------------------------------------------------
+    // --- 9. Streudiagramm --------------------------------------------------
     var sc = scatterChart();
     if (sc) {
       var scard = el('div', { class: 'card' }, [el('h2', { text: 'Was hängt mit deiner Bewertung zusammen?' })]);
@@ -685,78 +851,64 @@
     }
   }
 
-  /* ------------------------------------------------------ Ansicht Verlauf */
-
-  function renderHistory() {
-    var body = $('#histBody');
-    body.innerHTML = '';
-    var list = C.sortEntries(state.entries).reverse();
-    $('#histSub').textContent = list.length ? list.length + ' Nächte · neueste zuerst' : 'Noch leer';
-
-    if (!list.length) {
-      body.appendChild(el('div', { class: 'empty' }, [
-        el('h2', { text: 'Noch keine Nächte' }),
-        el('p', { text: 'Sobald du Nächte einträgst, findest du sie hier – zum Nachsehen, Korrigieren oder Löschen.' })
-      ]));
-      return;
-    }
-
-    var currentMonth = null;
-    list.forEach(function (e) {
-      var m = e.date.slice(0, 7);
-      if (m !== currentMonth) {
-        currentMonth = m;
-        body.appendChild(el('div', { class: 'hist-month', text: C.formatDate(e.date, 'month') }));
-      }
-      var d = C.derive(e);
-      var dt = C.parseKey(e.date);
-      body.appendChild(el('button', { class: 'hist-item', type: 'button',
-        onclick: function () { openDate(e.date); } }, [
-        el('div', { class: 'hist-day' }, [
-          el('div', { class: 'dd', text: String(dt.getDate()) }),
-          el('div', { class: 'ww', text: C.WEEKDAYS[dt.getDay()] })
-        ]),
-        el('div', { class: 'hist-main' }, [
-          el('div', { class: 'dur', text: C.formatDuration(d.sleep) }),
-          el('div', { class: 'meta', text: e.bed + '–' + e.wake +
-            ((e.factors || []).length ? ' · ' + e.factors.map(C.factorLabel).join(', ') : '') })
-        ]),
-        el('div', { class: 'hist-q', text: String(e.quality),
-          style: 'border-color:' + (e.quality >= 7 ? 'var(--good)' : e.quality <= 4 ? 'var(--danger)' : 'var(--line)') })
-      ]));
-    });
-  }
-
   /* --------------------------------------------------------- Ansicht Mehr */
+
+  function stepperRow(label, hint, getValue, setValue, id) {
+    return el('div', { class: 'row' }, [
+      el('div', {}, [el('div', { class: 'rk', text: label }), el('div', { class: 'rd', text: hint })]),
+      el('div', { style: 'display:flex;align-items:center;gap:8px' }, [
+        el('button', { class: 'iconbtn', text: '−', 'aria-label': label + ' 15 Minuten kürzer',
+          onclick: function () { setValue(getValue() - 15); } }),
+        el('span', { class: 'goal-display', id: id, text: C.formatDuration(getValue(), { short: true }) }),
+        el('button', { class: 'iconbtn', text: '+', 'aria-label': label + ' 15 Minuten länger',
+          onclick: function () { setValue(getValue() + 15); } })
+      ])
+    ]);
+  }
 
   function renderMore() {
     var body = $('#moreBody');
     body.innerHTML = '';
 
-    // Schlafziel
+    // Schlafziel und Minimum
     var goalCard = el('div', { class: 'card' }, [el('h2', { text: 'Schlafziel' })]);
-    var goalRow = el('div', { class: 'row' }, [
-      el('div', {}, [
-        el('div', { class: 'rk', text: 'Zielschlafdauer' }),
-        el('div', { class: 'rd', text: 'Gilt für Ziel-Linie, Statistik und Hinweise' })
-      ]),
-      el('div', { style: 'display:flex;align-items:center;gap:8px' }, [
-        el('button', { class: 'iconbtn', text: '−', 'aria-label': 'Ziel 15 Minuten kürzer',
-          onclick: function () { setGoal(state.settings.goalMin - 15); } }),
-        el('span', { class: 'goal-display', id: 'goalOut', text: C.formatDuration(state.settings.goalMin, { short: true }) }),
-        el('button', { class: 'iconbtn', text: '+', 'aria-label': 'Ziel 15 Minuten länger',
-          onclick: function () { setGoal(state.settings.goalMin + 15); } })
-      ])
-    ]);
-    goalCard.appendChild(goalRow);
+    goalCard.appendChild(stepperRow('Zielschlafdauer', 'Ab hier zählt eine Nacht als grün',
+      function () { return state.settings.goalMin; }, setGoal, 'goalOut'));
+    goalCard.appendChild(stepperRow('Minimum', 'Darunter zählt eine Nacht als rot',
+      function () { return state.settings.minMin; }, setMinimum, 'minOut'));
     goalCard.appendChild(el('p', { class: 'note-small',
-      text: 'Für Erwachsene werden meist sieben bis neun Stunden genannt. Der beste Wert ist der, nach dem du dich tagsüber wach fühlst.' }));
+      text: 'Zwischen Minimum und Ziel wird eine Nacht gelb dargestellt. Für Erwachsene werden meist sieben bis neun Stunden genannt. Der beste Wert ist der, nach dem du dich tagsüber wach fühlst.' }));
     body.appendChild(goalCard);
 
-    // Faktoren
-    var facCard = el('div', { class: 'card' }, [
-      el('h2', { text: 'Faktoren im Eintrag' })
+    // Vorauswahl der Uhrzeiten
+    var preCard = el('div', { class: 'card' }, [el('h2', { text: 'Vorauswahl für neue Nächte' })]);
+    var preRow = el('div', { class: 'timerow' }, [
+      el('div', { class: 'timecell' }, [
+        el('div', { class: 'lbl', text: 'Ins Bett' }),
+        el('div', { class: 'timeinput' }, [
+          el('input', { type: 'time', step: '300', value: state.settings.defaultBed, 'aria-label': 'Vorauswahl ins Bett',
+            oninput: function () {
+              if (C.toMin(this.value) !== null) { state.settings.defaultBed = this.value; saveSettings(); }
+            } })
+        ])
+      ]),
+      el('div', { class: 'timecell' }, [
+        el('div', { class: 'lbl', text: 'Aufgestanden' }),
+        el('div', { class: 'timeinput' }, [
+          el('input', { type: 'time', step: '300', value: state.settings.defaultWake, 'aria-label': 'Vorauswahl aufgestanden',
+            oninput: function () {
+              if (C.toMin(this.value) !== null) { state.settings.defaultWake = this.value; saveSettings(); }
+            } })
+        ])
+      ])
     ]);
+    preCard.appendChild(preRow);
+    preCard.appendChild(el('p', { class: 'note-small',
+      text: 'Mit diesen Zeiten startet jede neue Nacht. Je näher sie an deinem Alltag liegen, desto weniger musst du morgens tippen.' }));
+    body.appendChild(preCard);
+
+    // Faktoren
+    var facCard = el('div', { class: 'card' }, [el('h2', { text: 'Faktoren im Eintrag' })]);
     var chips = el('div', { class: 'chips' });
     C.FACTORS.forEach(function (f) {
       var on = (state.settings.factors || []).indexOf(f.id) >= 0;
@@ -813,8 +965,7 @@
       ])
     ]));
     if (!state.entries.length) {
-      dataCard.appendChild(el('button', { class: 'btn', text: 'Beispieldaten zum Ausprobieren laden',
-        onclick: loadDemo }));
+      dataCard.appendChild(el('button', { class: 'btn', text: 'Beispieldaten zum Ausprobieren laden', onclick: loadDemo }));
     }
     dataCard.appendChild(el('button', { class: 'btn btn-danger', text: 'Alle Daten löschen', onclick: wipeAll }));
     body.appendChild(dataCard);
@@ -823,6 +974,7 @@
     body.appendChild(el('div', { class: 'card' }, [
       el('h2', { text: 'Über diese App' }),
       el('p', { class: 'note-small', html:
+        'Eine Nacht trägt immer das Datum des Abends, an dem du ins Bett gehst. Die letzte eintragbare Nacht ist deshalb die von gestern.<br><br>' +
         'Alle Einträge liegen ausschließlich im Speicher dieses Browsers auf diesem Gerät. ' +
         'Es gibt kein Konto, keinen Server, keine Werbung und keine Analyse durch Dritte. ' +
         'Die App funktioniert vollständig offline.<br><br>' +
@@ -834,10 +986,23 @@
 
   function setGoal(min) {
     state.settings.goalMin = Math.max(240, Math.min(660, min));
+    if (state.settings.minMin > state.settings.goalMin) state.settings.minMin = state.settings.goalMin;
     saveSettings();
-    var out = $('#goalOut');
-    if (out) out.textContent = C.formatDuration(state.settings.goalMin, { short: true });
+    refreshGoalOut();
     renderNight();
+  }
+
+  function setMinimum(min) {
+    state.settings.minMin = Math.max(120, Math.min(state.settings.goalMin, min));
+    saveSettings();
+    refreshGoalOut();
+    renderNight();
+  }
+
+  function refreshGoalOut() {
+    var g = $('#goalOut'), m = $('#minOut');
+    if (g) g.textContent = C.formatDuration(state.settings.goalMin, { short: true });
+    if (m) m.textContent = C.formatDuration(state.settings.minMin, { short: true });
   }
 
   /* ------------------------------------------------------- Export/Import */
@@ -957,13 +1122,9 @@
     var seed = Date.now() % 100000;
     function rnd() { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; }
     for (var i = 44; i >= 0; i--) {
-      var date = C.addDays(todayKey(), -i);
-      var weekend = C.isWeekendMorning(date);
-      var alcohol = rnd() > 0.78;
-      var sport = rnd() > 0.6;
-      var stress = rnd() > 0.7;
-      var bed = 1350 + Math.round(rnd() * 70) + (weekend ? 55 : 0) + (alcohol ? 35 : 0);
-      var wake = 375 + Math.round(rnd() * 25) + (weekend ? 70 : 0);
+      var date = C.addDays(maxDate(), -i);
+      var weekend = C.isWeekendNight(date);
+      var alcohol = rnd() > 0.78, sport = rnd() > 0.6, stress = rnd() > 0.7;
       var q = 6 + (sport ? 1 : 0) - (alcohol ? 2 : 0) - (stress ? 1 : 0) + Math.round(rnd() * 2 - 1);
       var factors = [];
       if (alcohol) factors.push('alkohol');
@@ -971,9 +1132,11 @@
       if (stress) factors.push('stress');
       if (rnd() > 0.5) factors.push('bildschirm');
       out.push({
-        date: date, bed: C.fromMin(bed), wake: C.fromMin(wake),
-        latency: alcohol ? 3 : [3, 10, 22, 45][Math.floor(rnd() * 4)],
-        awake: alcohol ? 25 : [0, 0, 10, 25][Math.floor(rnd() * 4)],
+        date: date,
+        bed: C.fromMin(1350 + Math.round(rnd() * 70) + (weekend ? 55 : 0) + (alcohol ? 35 : 0)),
+        wake: C.fromMin(375 + Math.round(rnd() * 25) + (weekend ? 70 : 0)),
+        latency: alcohol ? 5 : [5, 15, 30][Math.floor(rnd() * 3)],
+        awake: alcohol ? 30 : [0, 0, 15, 30][Math.floor(rnd() * 4)],
         quality: Math.max(1, Math.min(10, q)),
         factors: factors.filter(function (f) { return (state.settings.factors || []).indexOf(f) >= 0; }),
         note: '', updatedAt: new Date().toISOString()
@@ -1000,24 +1163,28 @@
     });
     $('#saveBar').classList.toggle('is-visible', view === 'night');
     if (view === 'stats') renderStats();
-    if (view === 'history') renderHistory();
     if (view === 'more') renderMore();
     if (view === 'night') renderNight();
     window.scrollTo(0, 0);
   }
 
   function openDate(date) {
+    if (date > navMax()) date = navMax();
     state.date = date;
     state.draft = suggestDraft(date);
     state.dirty = false;
+    state.freeLatency = false;
+    state.freeAwake = false;
     show('night');
   }
 
+  function touch() { state.dirty = true; }
+
   function renderAll() {
+    if (state.date > navMax()) state.date = navMax();
     state.draft = suggestDraft(state.date);
     renderNight();
     if (state.view === 'stats') renderStats();
-    if (state.view === 'history') renderHistory();
     if (state.view === 'more') renderMore();
   }
 
@@ -1031,15 +1198,13 @@
     if (meta) meta.setAttribute('content', t === 'light' ? '#eef0f3' : '#12151c');
   }
 
-  /* ------------------------------------------------------------- Ereignisse */
+  /* ---------------------------------------------------------- Ereignisse */
 
   function bind() {
     $$('.nav button').forEach(function (b) {
       b.addEventListener('click', function () {
-        // Der Tab „Nacht“ meint immer die letzte Nacht – außer es gibt
-        // ungespeicherte Änderungen an einem anderen Tag.
-        if (b.dataset.view === 'night' && state.date !== todayKey() && !state.dirty) {
-          openDate(todayKey());
+        if (b.dataset.view === 'night' && state.date !== lastNight() && !state.dirty) {
+          openDate(lastNight());
           return;
         }
         show(b.dataset.view);
@@ -1048,8 +1213,19 @@
 
     $('#dayPrev').addEventListener('click', function () { openDate(C.addDays(state.date, -1)); });
     $('#dayNext').addEventListener('click', function () {
-      if (state.date >= todayKey()) return;
+      if (state.date >= navMax()) return;
       openDate(C.addDays(state.date, 1));
+    });
+
+    var picker = $('#datePicker');
+    picker.addEventListener('change', function () {
+      if (!C.isValidKey(this.value)) return;
+      openDate(this.value > navMax() ? navMax() : this.value);
+    });
+    $('#dayPick').addEventListener('click', function () {
+      if (picker.showPicker) { try { picker.showPicker(); return; } catch (e) {} }
+      picker.focus();
+      picker.click();
     });
 
     $('#inBed').addEventListener('input', function () {
@@ -1071,6 +1247,28 @@
       });
     });
 
+    $('#inLatency').addEventListener('input', function () {
+      var v = parseInt(this.value, 10);
+      if (!isFinite(v)) return;
+      state.draft.latency = Math.max(0, Math.min(600, v));
+      touch();
+      renderNight();
+    });
+    $('#inAwake').addEventListener('input', function () {
+      var v = parseInt(this.value, 10);
+      if (!isFinite(v)) return;
+      state.draft.awake = Math.max(0, Math.min(600, v));
+      touch();
+      renderNight();
+    });
+
+    [['#inTempBed', 'tempBed'], ['#inTempWake', 'tempWake']].forEach(function (pair) {
+      $(pair[0]).addEventListener('input', function () {
+        state.draft[pair[1]] = this.value === '' ? null : C.cleanTemp(this.value);
+        touch();
+      });
+    });
+
     $('#inQuality').addEventListener('input', function () {
       state.draft.quality = parseInt(this.value, 10);
       touch();
@@ -1083,11 +1281,20 @@
     $('#btnSave').addEventListener('click', saveDraft);
 
     $('#btnDeleteEntry').addEventListener('click', function () {
+      if (isPlannedDate(state.date)) {
+        savePlanned(null);
+        state.draft = suggestDraft(state.date);
+        state.dirty = false;
+        renderNight();
+        toast('Vormerkung gelöscht');
+        return;
+      }
       confirmDialog('Eintrag löschen?', C.formatDate(state.date, 'long') + ' wird entfernt.', 'Ja, löschen')
         .then(function (yes) {
           if (!yes) return;
           deleteEntry(state.date);
           state.draft = suggestDraft(state.date);
+          state.dirty = false;
           renderNight();
           toast('Eintrag gelöscht');
         });
@@ -1105,7 +1312,6 @@
       else if (mq.addListener) mq.addListener(onChange);
     }
 
-    // Beim Zurückkehren in die App auf den neuen Tag springen
     window.addEventListener('popstate', function (ev) {
       var v = ev.state && ev.state.view ? ev.state.view : 'night';
       if (v !== state.view) show(v, true);
@@ -1113,18 +1319,13 @@
 
     document.addEventListener('visibilitychange', function () {
       if (document.visibilityState !== 'visible') return;
-      if (state.view === 'night' && state.date !== todayKey() && !state.dirty) {
-        openDate(todayKey());
-      }
+      if (state.view === 'night' && state.date !== lastNight() && !state.dirty) openDate(lastNight());
     });
   }
 
-  function touch() { state.dirty = true; }
-
-  /* ------------------------------------------------------------------ Start */
+  /* ---------------------------------------------------------------- Start */
 
   function init() {
-    // Verfügbarkeit des Speichers prüfen
     try {
       localStorage.setItem('__test__', '1');
       localStorage.removeItem('__test__');
@@ -1134,7 +1335,7 @@
 
     loadAll();
     applyTheme();
-    state.date = todayKey();
+    state.date = lastNight();
     state.draft = suggestDraft(state.date);
     bind();
     if (window.history && window.history.replaceState) {
@@ -1157,8 +1358,9 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 
-  // Für Tests
   window.__app = { state: state, show: show, openDate: openDate, saveDraft: saveDraft,
-    renderStats: renderStats, renderHistory: renderHistory, renderMore: renderMore,
-    handleImportFile: handleImportFile, loadDemo: loadDemo, KEY_ENTRIES: KEY_ENTRIES, KEY_SETTINGS: KEY_SETTINGS };
+    renderStats: renderStats, renderMore: renderMore, maxDate: maxDate,
+    lastNight: lastNight, navMax: navMax, KEY_PLANNED: KEY_PLANNED,
+    handleImportFile: handleImportFile, loadDemo: loadDemo,
+    KEY_ENTRIES: KEY_ENTRIES, KEY_SETTINGS: KEY_SETTINGS };
 })();

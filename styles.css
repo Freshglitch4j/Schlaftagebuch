@@ -23,6 +23,9 @@
   --danger: #cf7f70;
   --danger-soft: rgba(207, 127, 112, 0.14);
   --good: #8bab86;
+  --ok: #7fb07a;
+  --mid: #e0a15c;
+  --bad: #cf7f70;
   --radius: 14px;
   --radius-lg: 20px;
   --tap: 48px;
@@ -48,10 +51,16 @@ html[data-theme="light"] {
   --danger: #a4433a;
   --danger-soft: rgba(164, 67, 58, 0.1);
   --good: #4d7347;
+  --ok: #43793c;
+  --mid: #b5751f;
+  --bad: #a4433a;
   --shadow: 0 6px 18px rgba(20, 25, 35, 0.1);
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+/* Muss stärker sein als Klassenregeln, die display setzen */
+[hidden] { display: none !important; }
 
 html, body {
   margin: 0;
@@ -63,6 +72,8 @@ html, body {
   line-height: 1.5;
   -webkit-text-size-adjust: 100%;
   overscroll-behavior-y: contain;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 body {
@@ -91,6 +102,7 @@ button { cursor: pointer; }
 .app {
   flex: 1;
   width: 100%;
+  min-width: 0;
   max-width: 560px;
   margin: 0 auto;
   padding: 0 var(--page) calc(var(--tap) + 68px + env(safe-area-inset-bottom));
@@ -108,10 +120,17 @@ button { cursor: pointer; }
 }
 
 .topbar h1 { font-size: 20px; letter-spacing: -0.01em; }
+.daynav { display: flex; align-items: center; gap: 6px; position: relative; flex: 0 0 auto; }
+.daytitle { flex: 1 1 auto; min-width: 0; text-align: center; }
+.datepicker {
+  position: absolute; left: 0; top: 0; width: 44px; height: 44px;
+  opacity: 0; border: 0; padding: 0; margin: 0; z-index: 2; background: transparent;
+}
 .topbar .sub { color: var(--text-dim); font-size: 13px; margin-top: 2px; }
 
 .iconbtn {
-  min-width: 44px;
+  min-width: 42px;
+  flex: 0 0 auto;
   height: 44px;
   border: 1px solid var(--line);
   background: var(--bg-elev);
@@ -121,7 +140,7 @@ button { cursor: pointer; }
   font-size: 19px;
   line-height: 1;
   color: var(--text-dim);
-  padding: 0 12px;
+  padding: 0 8px;
 }
 .iconbtn:active { background: var(--bg-elev-2); }
 .iconbtn[disabled] { opacity: 0.35; }
@@ -136,7 +155,8 @@ button { cursor: pointer; }
   margin-bottom: 18px;
 }
 
-.hero-figure { display: flex; align-items: baseline; gap: 10px; }
+.hero-head { font-size: 13px; color: var(--text-dim); margin-bottom: 2px; }
+.hero-figure { display: flex; align-items: baseline; gap: 8px; }
 .hero-num {
   font-size: 54px;
   font-weight: 300;
@@ -159,30 +179,25 @@ button { cursor: pointer; }
   display: flex;
 }
 .seg { height: 100%; position: relative; }
-.seg-sleep { background: var(--accent); }
+.seg-sleep { background: var(--mid); }
+.seg-sleep.is-ok { background: var(--ok); }
+.seg-sleep.is-mid { background: var(--mid); }
+.seg-sleep.is-bad { background: var(--bad); }
 .seg-idle {
   background: repeating-linear-gradient(
     -45deg, var(--line) 0 4px, transparent 4px 8px
   );
   background-color: var(--bg-elev-2);
 }
-.goalmark {
+.mark {
   position: absolute;
-  top: -3px;
-  bottom: -3px;
+  top: 0;
+  bottom: 0;
   width: 2px;
-  background: var(--text);
-  opacity: 0.75;
+  background: var(--bg);
+  opacity: 0.9;
 }
-.goalmark::after {
-  content: "Ziel";
-  position: absolute;
-  top: -16px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 10px;
-  color: var(--text-dim);
-}
+.nightbar-hint { font-size: 11.5px; color: var(--text-faint); margin-top: 4px; }
 .nightbar-legend {
   display: flex;
   justify-content: space-between;
@@ -202,8 +217,8 @@ button { cursor: pointer; }
   margin-bottom: 8px;
 }
 
-.timerow { display: flex; gap: 10px; }
-.timecell { flex: 1; }
+.timerow { display: flex; gap: 8px; }
+.timecell { flex: 1 1 0; min-width: 0; }
 .timecell .lbl { font-size: 13px; color: var(--text-faint); margin-bottom: 6px; }
 
 .timeinput {
@@ -215,18 +230,26 @@ button { cursor: pointer; }
   overflow: hidden;
 }
 .timeinput input[type="time"] {
-  flex: 1;
+  flex: 1 1 auto;
+  width: 100%;
   min-width: 0;
   border: 0;
   background: transparent;
-  padding: 12px 4px;
-  font-size: 22px;
+  padding: 12px 0;
+  font-size: 19px;
   font-variant-numeric: tabular-nums;
   text-align: center;
+  -webkit-appearance: none;
+  appearance: none;
 }
-.timeinput input[type="time"]::-webkit-calendar-picker-indicator { display: none; }
+.timeinput input[type="time"]::-webkit-calendar-picker-indicator,
+.timeinput input[type="time"]::-webkit-inner-spin-button {
+  display: none;
+  -webkit-appearance: none;
+}
 .stepbtn {
-  width: 42px;
+  width: 36px;
+  flex: 0 0 36px;
   border: 0;
   background: var(--bg-elev-2);
   color: var(--text-dim);
@@ -238,8 +261,7 @@ button { cursor: pointer; }
 /* Segmentierte Auswahl */
 .segmented {
   display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
   gap: 8px;
 }
 .segmented button {
@@ -248,8 +270,9 @@ button { cursor: pointer; }
   background: var(--bg-elev);
   color: var(--text-dim);
   border-radius: var(--radius);
-  font-size: 14px;
-  padding: 6px 2px;
+  font-size: 13.5px;
+  line-height: 1.2;
+  padding: 6px 4px;
 }
 .segmented button[aria-pressed="true"] {
   background: var(--accent);
@@ -257,6 +280,51 @@ button { cursor: pointer; }
   color: var(--accent-ink);
   font-weight: 600;
 }
+
+/* Zahleneingabe im Stil der Uhrzeitfelder */
+.timeinput input[type="number"] {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 12px 0 12px 10px;
+  font-size: 19px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  -webkit-appearance: none;
+  appearance: none;
+  -moz-appearance: textfield;
+}
+.timeinput input[type="number"]::-webkit-outer-spin-button,
+.timeinput input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none; margin: 0;
+}
+.timeinput .unit {
+  display: grid; place-items: center;
+  padding: 0 12px 0 2px; font-size: 14px; color: var(--text-faint);
+}
+
+/* Hinweis für die kommende Nacht */
+.planned-note {
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  font-size: 13.5px;
+  color: var(--text-dim);
+}
+.planned-note strong { display: block; color: var(--accent); font-size: 15px; margin-bottom: 3px; }
+
+/* Freie Minuteneingabe */
+.freeinput { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.freeinput input {
+  width: 90px; min-width: 0; text-align: center;
+  padding: 11px 8px; font-size: 19px; font-variant-numeric: tabular-nums;
+  background: var(--bg-elev); border: 1px solid var(--accent); border-radius: var(--radius);
+}
+.freeinput span { font-size: 13.5px; color: var(--text-dim); }
 
 /* Qualitäts-Slider */
 .quality-head {
@@ -388,8 +456,9 @@ details.note textarea {
 }
 .stat .v small { font-size: 13px; color: var(--text-dim); font-weight: 400; }
 .stat .d { font-size: 12.5px; color: var(--text-faint); margin-top: 1px; }
-.v-good { color: var(--good); }
-.v-warn { color: var(--accent); }
+.v-good, .v-ok { color: var(--ok); }
+.v-warn, .v-mid { color: var(--mid); }
+.v-bad { color: var(--bad); }
 
 /* Erkenntnisse */
 .insight {
@@ -515,6 +584,13 @@ dialog ul { font-size: 14px; color: var(--text-dim); margin: 0 0 16px; padding-l
 .sr-only {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
   overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+@media (max-width: 380px) {
+  :root { --page: 16px; }
+  .stepbtn { width: 32px; flex: 0 0 32px; }
+  .timeinput input[type="time"], .timeinput input[type="number"] { font-size: 17px; }
+  .timeinput .unit { padding: 0 8px 0 0; }
 }
 
 @media (max-width: 340px) {

@@ -22,25 +22,41 @@
   <!-- ============================================================ NACHT -->
   <section id="view-night" class="view is-active" aria-label="Eintrag">
     <div class="topbar">
-      <button class="iconbtn" id="dayPrev" aria-label="Tag zurück">‹</button>
-      <div style="text-align:center;flex:1">
+      <div class="daynav">
+        <button class="iconbtn" id="dayPick" aria-label="Datum auswählen">
+          <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true" fill="none"
+               stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+            <rect x="3" y="5" width="18" height="16" rx="3"></rect>
+            <path d="M3 10h18M8 3v4M16 3v4"></path>
+          </svg>
+        </button>
+        <input type="date" id="datePicker" class="datepicker" aria-label="Datum der Nacht">
+        <button class="iconbtn" id="dayPrev" aria-label="Eine Nacht zurück">‹</button>
+      </div>
+      <div class="daytitle">
         <h1 id="dayTitle">Letzte Nacht</h1>
         <div class="sub" id="daySub">–</div>
       </div>
-      <button class="iconbtn" id="dayNext" aria-label="Tag vor">›</button>
+      <button class="iconbtn" id="dayNext" aria-label="Eine Nacht vor">›</button>
     </div>
 
-    <div class="hero">
+    <div class="planned-note" id="plannedNote" hidden>
+      <strong>Kommende Nacht</strong>
+      <span>Du kannst schon vormerken, wann du ins Bett gehst, wie warm es ist und was heute war.
+      Morgen früh steht das dann fertig da und du ergänzt nur noch den Rest.</span>
+    </div>
+
+    <div class="hero" id="hero">
+      <div class="hero-head">Schlafdauer</div>
       <div class="hero-figure">
         <span class="hero-num" id="heroNum">–</span>
-        <span class="hero-unit" id="heroUnit">geschlafen</span>
+        <span class="hero-unit" id="heroUnit">h</span>
       </div>
       <div class="nightbar" id="nightBar" aria-hidden="true"></div>
       <div class="nightbar-legend">
         <span id="legendBed">–</span>
         <span id="legendWake">–</span>
       </div>
-      <p class="hero-caption" id="heroCaption"></p>
     </div>
 
     <div id="entryWarnings"></div>
@@ -50,33 +66,65 @@
         <div class="timecell">
           <div class="lbl">Ins Bett</div>
           <div class="timeinput">
-            <button class="stepbtn" data-step="bed:-15" aria-label="Bettzeit 15 Minuten früher">−</button>
-            <input type="time" id="inBed" step="300" value="23:00" aria-label="Uhrzeit ins Bett">
-            <button class="stepbtn" data-step="bed:15" aria-label="Bettzeit 15 Minuten später">+</button>
+            <button class="stepbtn" data-step="bed:-5" aria-label="Bettzeit 5 Minuten früher">−</button>
+            <input type="time" id="inBed" step="300" value="22:30" aria-label="Uhrzeit ins Bett">
+            <button class="stepbtn" data-step="bed:5" aria-label="Bettzeit 5 Minuten später">+</button>
           </div>
         </div>
-        <div class="timecell">
+        <div class="timecell" id="cellWake">
           <div class="lbl">Aufgestanden</div>
           <div class="timeinput">
-            <button class="stepbtn" data-step="wake:-15" aria-label="Aufstehzeit 15 Minuten früher">−</button>
-            <input type="time" id="inWake" step="300" value="07:00" aria-label="Uhrzeit aufgestanden">
-            <button class="stepbtn" data-step="wake:15" aria-label="Aufstehzeit 15 Minuten später">+</button>
+            <button class="stepbtn" data-step="wake:-5" aria-label="Aufstehzeit 5 Minuten früher">−</button>
+            <input type="time" id="inWake" step="300" value="06:05" aria-label="Uhrzeit aufgestanden">
+            <button class="stepbtn" data-step="wake:5" aria-label="Aufstehzeit 5 Minuten später">+</button>
           </div>
         </div>
       </div>
     </div>
 
-    <div class="field">
-      <span class="lbl">Einschlafen gedauert</span>
-      <div class="segmented" id="segLatency" role="group" aria-label="Einschlafdauer"></div>
+    <div class="field" id="fieldTemp">
+      <span class="lbl">Zimmertemperatur <span style="color:var(--text-faint)">optional</span></span>
+      <div class="timerow">
+        <div class="timecell" id="cellTempBed">
+          <div class="lbl">Beim Einschlafen</div>
+          <div class="timeinput">
+            <input type="number" id="inTempBed" step="0.5" min="-20" max="50" inputmode="decimal"
+                   placeholder="–" aria-label="Temperatur beim Einschlafen in Grad Celsius">
+            <span class="unit">°C</span>
+          </div>
+        </div>
+        <div class="timecell" id="cellTempWake">
+          <div class="lbl">Beim Aufwachen</div>
+          <div class="timeinput">
+            <input type="number" id="inTempWake" step="0.5" min="-20" max="50" inputmode="decimal"
+                   placeholder="–" aria-label="Temperatur beim Aufwachen in Grad Celsius">
+            <span class="unit">°C</span>
+          </div>
+        </div>
+      </div>
     </div>
 
-    <div class="field">
+    <div class="field" id="fieldLatency">
+      <span class="lbl">Einschlafzeit</span>
+      <div class="segmented" id="segLatency" role="group" aria-label="Einschlafzeit"></div>
+      <div class="freeinput" id="freeLatency" hidden>
+        <input type="number" id="inLatency" min="0" max="600" step="1" inputmode="numeric"
+               aria-label="Einschlafzeit in Minuten">
+        <span>Minuten zum Einschlafen</span>
+      </div>
+    </div>
+
+    <div class="field" id="fieldAwake">
       <span class="lbl">Nachts wach gelegen</span>
       <div class="segmented" id="segAwake" role="group" aria-label="Wachzeit in der Nacht"></div>
+      <div class="freeinput" id="freeAwake" hidden>
+        <input type="number" id="inAwake" min="0" max="600" step="1" inputmode="numeric"
+               aria-label="Wachzeit in Minuten">
+        <span>Minuten wach gelegen</span>
+      </div>
     </div>
 
-    <div class="field">
+    <div class="field" id="fieldQuality">
       <div class="quality-head">
         <span class="lbl" style="margin:0">Wie fühlst du dich?</span>
         <span><span class="quality-val" id="qualVal">7</span><span class="quality-word" id="qualWord"></span></span>
@@ -86,7 +134,7 @@
     </div>
 
     <div class="field">
-      <span class="lbl">Was war gestern? <span style="color:var(--text-faint)">Nur antippen, was zutrifft</span></span>
+      <span class="lbl">Was war an diesem Tag? <span style="color:var(--text-faint)">Nur antippen, was zutrifft</span></span>
       <div class="chips" id="chipsFactors" role="group" aria-label="Tagesfaktoren"></div>
     </div>
 
@@ -102,12 +150,6 @@
   <section id="view-stats" class="view" aria-label="Auswertung">
     <div class="topbar"><div><h1>Auswertung</h1><div class="sub" id="statsSub">–</div></div></div>
     <div id="statsBody"></div>
-  </section>
-
-  <!-- =========================================================== VERLAUF -->
-  <section id="view-history" class="view" aria-label="Verlauf">
-    <div class="topbar"><div><h1>Verlauf</h1><div class="sub" id="histSub">–</div></div></div>
-    <div id="histBody"></div>
   </section>
 
   <!-- ============================================================== MEHR -->
@@ -127,7 +169,6 @@
 <nav class="nav" aria-label="Hauptnavigation">
   <button data-view="night" aria-current="page"><span class="ic" aria-hidden="true">☾</span>Nacht</button>
   <button data-view="stats"><span class="ic" aria-hidden="true">◴</span>Auswertung</button>
-  <button data-view="history"><span class="ic" aria-hidden="true">≡</span>Verlauf</button>
   <button data-view="more"><span class="ic" aria-hidden="true">⚙</span>Mehr</button>
 </nav>
 

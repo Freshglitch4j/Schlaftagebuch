@@ -186,18 +186,18 @@
 
   /* ------------------------------------------------------ Eintragslogik */
 
+  // Die Voreinstellungen sind exakte Minutenwerte – sie werden 1:1 von der
+  // Zeit im Bett abgezogen. Über „freie Eingabe“ ist jeder Wert möglich.
   var LATENCY_OPTIONS = [
-    { value: 3, label: '< 5 min' },
-    { value: 10, label: '5–15' },
-    { value: 22, label: '15–30' },
-    { value: 45, label: '> 30' }
+    { value: 5, label: '~5 min' },
+    { value: 15, label: '~15 min' },
+    { value: 30, label: '~30 min' }
   ];
 
   var AWAKE_OPTIONS = [
     { value: 0, label: 'gar nicht' },
-    { value: 10, label: 'kurz' },
-    { value: 25, label: '~30 min' },
-    { value: 60, label: '> 45 min' }
+    { value: 15, label: '~15 min' },
+    { value: 30, label: '~30 min' }
   ];
 
   var FACTORS = [
@@ -216,11 +216,28 @@
   var DEFAULT_FACTORS = ['alkohol', 'sport', 'stress', 'bildschirm', 'spaetessen', 'mittagsschlaf'];
 
   var DEFAULT_SETTINGS = {
-    goalMin: 450,          // 7 h 30 min
+    goalMin: 450,          // Ziel: 7 h 30 min
+    minMin: 390,           // Minimum: 6 h 30 min – darunter gilt eine Nacht als zu kurz
+    defaultBed: '22:30',
+    defaultWake: '06:05',
     theme: 'auto',
     factors: DEFAULT_FACTORS.slice(),
-    schemaVersion: 1
+    schemaVersion: 2
   };
+
+  // Ampelbewertung einer Nacht
+  function sleepStatus(sleepMin, settings) {
+    if (sleepMin === null || sleepMin === undefined) return 'none';
+    if (sleepMin >= settings.goalMin) return 'good';
+    if (sleepMin < settings.minMin) return 'bad';
+    return 'mid';
+  }
+
+  // Nächte werden nach dem Abend benannt, an dem man ins Bett geht.
+  // Die letzte vollständige Nacht ist deshalb immer „gestern“.
+  function lastNightKey(today) { return addDays(today, -1); }
+
+  function isWeekendNight(key) { var w = weekdayIndex(key); return w === 5 || w === 6; }
 
   function factorLabel(id) {
     for (var i = 0; i < FACTORS.length; i++) if (FACTORS[i].id === id) return FACTORS[i].label;
@@ -275,6 +292,15 @@
     return { ok: errors.length === 0, errors: errors, warnings: warnings };
   }
 
+  // Temperatur in Grad Celsius, optional. Alles außerhalb eines plausiblen
+  // Zimmerbereichs gilt als Tippfehler und wird verworfen.
+  function cleanTemp(v) {
+    if (v === null || v === undefined || v === '') return null;
+    var n = Number(typeof v === 'string' ? v.replace(',', '.').trim() : v);
+    if (!isFinite(n) || n < -20 || n > 50) return null;
+    return Math.round(n * 10) / 10;
+  }
+
   // Bereinigt einen Eintrag auf das Schema (für Import und Speichern)
   function normalizeEntry(raw, activeFactors) {
     if (!raw || typeof raw !== 'object') return null;
@@ -290,6 +316,8 @@
       latency: Math.max(0, Math.min(600, Math.round(Number(raw.latency) || 0))),
       awake: Math.max(0, Math.min(600, Math.round(Number(raw.awake) || 0))),
       quality: Math.max(1, Math.min(10, Math.round(Number(raw.quality) || 0))),
+      tempBed: cleanTemp(raw.tempBed),
+      tempWake: cleanTemp(raw.tempWake),
       factors: factors.filter(function (v, i, a) { return a.indexOf(v) === i; }),
       note: typeof raw.note === 'string' ? raw.note.slice(0, 500) : '',
       updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : new Date().toISOString()
@@ -590,6 +618,9 @@
       exportedAt: new Date().toISOString(),
       settings: {
         goalMin: settings.goalMin,
+        minMin: settings.minMin,
+        defaultBed: settings.defaultBed,
+        defaultWake: settings.defaultWake,
         theme: settings.theme,
         factors: settings.factors
       },
@@ -599,12 +630,15 @@
 
   function toCsv(entries) {
     var head = ['datum', 'ins_bett', 'aufgestanden', 'einschlafdauer_min', 'wachzeit_min',
-      'zeit_im_bett_min', 'schlafdauer_min', 'effizienz_prozent', 'qualitaet', 'faktoren', 'notiz'];
+      'zeit_im_bett_min', 'schlafdauer_min', 'effizienz_prozent', 'qualitaet',
+      'temp_einschlafen_c', 'temp_aufwachen_c', 'faktoren', 'notiz'];
     var rows = sortEntries(entries).map(function (e) {
       var d = derive(e) || { timeInBed: '', sleep: '', efficiency: 0 };
       return [
         e.date, e.bed, e.wake, e.latency, e.awake,
         d.timeInBed, d.sleep, Math.round(d.efficiency * 100), e.quality,
+        e.tempBed === null || e.tempBed === undefined ? '' : String(e.tempBed).replace('.', ','),
+        e.tempWake === null || e.tempWake === undefined ? '' : String(e.tempWake).replace('.', ','),
         (e.factors || []).join('|'),
         String(e.note || '').replace(/[\r\n]+/g, ' ')
       ];
@@ -612,7 +646,9 @@
     return [head].concat(rows).map(function (r) {
       return r.map(function (cell) {
         var s = String(cell === null || cell === undefined ? '' : cell);
-        return /[";,]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+        // Trennzeichen ist das Semikolon, deshalb muss ein Komma nicht
+        // maskiert werden – wichtig für Dezimalzahlen wie 19,5.
+        return /[";\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
       }).join(';');
     }).join('\r\n');
   }
@@ -662,6 +698,10 @@
     if (data.settings && typeof data.settings === 'object') {
       settings = {};
       if (isFinite(Number(data.settings.goalMin))) settings.goalMin = Math.max(180, Math.min(720, Math.round(Number(data.settings.goalMin))));
+      if (isFinite(Number(data.settings.minMin))) settings.minMin = Math.max(120, Math.min(720, Math.round(Number(data.settings.minMin))));
+      if (toMin(data.settings.defaultBed) !== null) settings.defaultBed = data.settings.defaultBed;
+      if (toMin(data.settings.defaultWake) !== null) settings.defaultWake = data.settings.defaultWake;
+      if (settings.minMin && settings.goalMin && settings.minMin > settings.goalMin) settings.minMin = settings.goalMin;
       if (['auto', 'light', 'dark'].indexOf(data.settings.theme) >= 0) settings.theme = data.settings.theme;
       if (Array.isArray(data.settings.factors)) {
         var known = FACTORS.map(function (f) { return f.id; });
@@ -693,12 +733,14 @@
     formatDuration: formatDuration,
     dateKey: dateKey, parseKey: parseKey, isValidKey: isValidKey, addDays: addDays,
     daysBetween: daysBetween, dateRange: dateRange, formatDate: formatDate,
-    weekdayIndex: weekdayIndex, isWeekendMorning: isWeekendMorning, WEEKDAYS: WEEKDAYS,
+    weekdayIndex: weekdayIndex, isWeekendMorning: isWeekendMorning,
+    isWeekendNight: isWeekendNight, lastNightKey: lastNightKey, sleepStatus: sleepStatus,
+    WEEKDAYS: WEEKDAYS,
     mean: mean, median: median, sd: sd, pearson: pearson, welch: welch, normCdf: normCdf,
     derive: derive, validateEntry: validateEntry, normalizeEntry: normalizeEntry,
     sortEntries: sortEntries, lastNDays: lastNDays, summarize: summarize,
     factorComparison: factorComparison, rollingAverage: rollingAverage,
-    nearestOption: nearestOption, factorLabel: factorLabel,
+    nearestOption: nearestOption, factorLabel: factorLabel, cleanTemp: cleanTemp,
     buildInsights: buildInsights, buildRecommendations: buildRecommendations,
     buildExport: buildExport, toCsv: toCsv, parseImport: parseImport
   };
