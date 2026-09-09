@@ -120,6 +120,22 @@
   var MONTHS = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli',
     'August', 'September', 'Oktober', 'November', 'Dezember'];
 
+  // „6. → 7. September 2026“, über Monats- und Jahresgrenzen hinweg korrekt
+  function formatNightSpan(key) {
+    var a = parseKey(key), b = parseKey(addDays(key, 1));
+    if (!a || !b) return key;
+    var arrow = ' → ';
+    if (a.getFullYear() !== b.getFullYear()) {
+      return a.getDate() + '. ' + MONTHS[a.getMonth()] + ' ' + a.getFullYear() + arrow +
+             b.getDate() + '. ' + MONTHS[b.getMonth()] + ' ' + b.getFullYear();
+    }
+    if (a.getMonth() !== b.getMonth()) {
+      return a.getDate() + '. ' + MONTHS[a.getMonth()] + arrow +
+             b.getDate() + '. ' + MONTHS[b.getMonth()] + ' ' + b.getFullYear();
+    }
+    return a.getDate() + '.' + arrow + b.getDate() + '. ' + MONTHS[a.getMonth()] + ' ' + a.getFullYear();
+  }
+
   function weekdayIndex(key) { var d = parseKey(key); return d ? d.getDay() : null; }
   function isWeekendMorning(key) { var w = weekdayIndex(key); return w === 0 || w === 6; }
 
@@ -786,6 +802,7 @@
     formatDuration: formatDuration,
     dateKey: dateKey, parseKey: parseKey, isValidKey: isValidKey, addDays: addDays,
     daysBetween: daysBetween, dateRange: dateRange, formatDate: formatDate,
+    formatNightSpan: formatNightSpan,
     weekdayIndex: weekdayIndex, isWeekendMorning: isWeekendMorning,
     isWeekendNight: isWeekendNight, lastNightKey: lastNightKey, sleepStatus: sleepStatus,
     WEEKDAYS: WEEKDAYS,

@@ -13,7 +13,7 @@
   var KEY_SETTINGS = 'schlaftagebuch.settings.v1';
   var KEY_BACKUP = 'schlaftagebuch.backup.v1';
   var KEY_PLANNED = 'schlaftagebuch.planned.v1';
-  var APP_VERSION = 'v7';
+  var APP_VERSION = 'v8';
 
   var $ = function (sel) { return document.querySelector(sel); };
   var $$ = function (sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); };
@@ -322,12 +322,12 @@
     var d = state.draft;
     var planned = isPlannedDate(state.date);
     var isLast = state.date === lastNight();
-    var isBefore = state.date === C.addDays(lastNight(), -1);
+    // Kopfzeile: Wochentag und Datum stehen immer an derselben Stelle,
+    // die Einordnung („welche Nacht ist das?“) darüber in einer festen Zeile.
+    $('#dayKind').textContent = planned ? 'Kommende Nacht' : (isLast ? 'Letzte Nacht' : 'Frühere Nacht');
     $('#dayDow').textContent = C.formatDate(state.date, 'dow');
-    $('#dayTitle').textContent = planned ? 'Kommende Nacht'
-      : (isLast ? 'Letzte Nacht' : (isBefore ? 'Vorletzte Nacht' : 'Nacht auf ' + C.formatDate(C.addDays(state.date, 1), 'short')));
-    $('#daySub').textContent = C.formatDate(state.date, 'plain') +
-      ' → ' + C.formatDate(C.addDays(state.date, 1), 'short');
+    $('#dayDate').textContent = C.formatDate(state.date, 'short');
+    $('#daySub').textContent = C.formatNightSpan(state.date);
     $('#dayNext').disabled = state.date >= navMax();
     $('#dayPrev').disabled = false;
     var picker = $('#datePicker');

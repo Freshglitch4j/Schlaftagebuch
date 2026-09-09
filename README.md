@@ -120,8 +120,10 @@ Also meistens: Zeiten mit **−/+** in 5-Minuten-Schritten korrigieren, die
 Qualität am Schieber einstellen, antippen was war, **Nacht speichern**. Für
 größere Sprünge auf die Uhrzeit tippen – dann öffnet der Time Picker von Android.
 
-Oben steht der Wochentag groß neben dem Titel, darunter das Datum des Abends
-und der Morgen danach.
+Der Kopf zeigt drei Zeilen: eine kleine Einordnung (**Kommende Nacht**,
+**Letzte Nacht** oder **Frühere Nacht**), darunter Wochentag und Datum des
+Abends, darunter die volle Zeitspanne der Nacht. Wochentag und Datum haben
+feste Breiten, deshalb bleibt beim Blättern alles an seinem Platz.
 
 Solange für eine Nacht nichts erfasst und nichts geändert ist, steht dort
 **„Keine Daten vorhanden“** – ohne Zahl und ohne Balken. Sobald du das erste
@@ -351,9 +353,9 @@ Es gibt zwei Ablagen im Browserspeicher: `schlaftagebuch.entries.v1` mit allen
 Nächten und `schlaftagebuch.planned.v1` mit der Vormerkung für die kommende
 Nacht. Die Vormerkung ist bewusst getrennt, damit sie keine Statistik verfälscht.
 
-Die Rechenlogik in `core.js` ist bewusst vom Rest getrennt und mit 161
+Die Rechenlogik in `core.js` ist bewusst vom Rest getrennt und mit 167
 automatischen Tests abgedeckt (`node tools/test-core.js`), die Oberfläche mit
-weiteren 256 (`node tools/test-ui.js`, benötigt `npm install jsdom`).
+weiteren 264 (`node tools/test-ui.js`, benötigt `npm install jsdom`).
 
 Die Hinweise in der Auswertung beschreiben Muster in deinen eigenen Zahlen. Sie
 sind keine Diagnose und ersetzen keine ärztliche Beratung. Bei anhaltenden

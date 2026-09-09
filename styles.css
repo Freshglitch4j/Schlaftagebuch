@@ -129,18 +129,37 @@ body.has-savebar .app { padding-bottom: calc(162px + env(safe-area-inset-bottom)
 .topbar h1 { font-size: 20px; letter-spacing: -0.01em; }
 .daynav { display: flex; align-items: center; gap: 6px; position: relative; flex: 0 0 auto; }
 .daytitle { flex: 1 1 auto; min-width: 0; text-align: center; }
-.daytitle h1 { display: flex; align-items: baseline; justify-content: center; gap: 8px; }
+.daykind {
+  font-size: 10.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-bottom: 1px;
+}
+.daytitle h1 { display: flex; align-items: baseline; justify-content: center; gap: 9px; }
+/* Beide Teile haben eine feste Breite, damit beim Blättern nichts springt */
 .dow {
-  font-size: 22px;
+  flex: 0 0 auto;
+  min-width: 2.1em;
+  text-align: right;
+  font-size: 21px;
   font-weight: 600;
   color: var(--accent);
+}
+.daydate {
+  flex: 0 0 auto;
+  min-width: 3.9em;
+  text-align: left;
+  font-size: 21px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
 }
 .datepicker {
   position: absolute; left: 0; top: 0; width: 44px; height: 44px;
   opacity: 0; border: 0; padding: 0; margin: 0; z-index: 2; background: transparent;
 }
-.topbar .sub { color: var(--text-dim); font-size: 13px; margin-top: 2px; }
+.topbar .sub { color: var(--text-dim); font-size: 12.5px; margin-top: 2px; }
 
 .iconbtn {
   min-width: 42px;
