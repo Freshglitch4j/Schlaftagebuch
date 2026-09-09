@@ -127,6 +127,8 @@
     var d = parseKey(key);
     if (!d) return key;
     if (style === 'long') return WEEKDAYS[d.getDay()] + ', ' + d.getDate() + '. ' + MONTHS[d.getMonth()] + ' ' + d.getFullYear();
+    if (style === 'plain') return d.getDate() + '. ' + MONTHS[d.getMonth()] + ' ' + d.getFullYear();
+    if (style === 'dow') return WEEKDAYS[d.getDay()];
     if (style === 'month') return MONTHS[d.getMonth()] + ' ' + d.getFullYear();
     if (style === 'short') return pad2(d.getDate()) + '.' + pad2(d.getMonth() + 1) + '.';
     return pad2(d.getDate()) + '.' + pad2(d.getMonth() + 1) + '.' + d.getFullYear();
@@ -401,6 +403,8 @@
       avgSleep: mean(sleeps),
       avgQuality: mean(quals),
       avgEfficiency: mean(list.map(function (x) { return x.d.efficiency; })),
+      avgLatency: mean(list.map(function (x) { return x.d.latency; })),
+      avgAwake: mean(list.map(function (x) { return x.d.awake; })),
       medianSleep: median(sleeps),
       goalHit: list.filter(function (x) { return x.d.sleep >= goalMin; }).length,
       goalRate: list.filter(function (x) { return x.d.sleep >= goalMin; }).length / list.length,
@@ -457,22 +461,23 @@
    * Jede Erkenntnis: { kind, tone: 'info'|'good'|'watch', title, text }
    * Grundsatz: lieber nichts sagen als etwas Unbelegtes behaupten.
    */
-  function buildInsights(entries, settings, todayKey) {
+  function buildInsights(entries, settings, todayKey, windowDays) {
     var goal = settings.goalMin;
+    var span = windowDays || 14;
     var out = [];
     var all = sortEntries(entries);
     if (all.length < MIN_FOR_AVERAGES) {
       out.push({
         kind: 'onboarding', tone: 'info',
         title: 'Noch zu wenig Daten',
-        text: 'Nach ungefähr 7 Nächten zeigt die App erste Durchschnittswerte, nach 14 Nächten mögliche Zusammenhänge mit deinen Tagesfaktoren. Bisher: ' +
-          all.length + ' von 7 Nächten.'
+        text: 'Nach ungefähr 7 Nächten zeigt die App erste Durchschnittswerte, nach 14 Nächten mögliche Zusammenhänge mit deinen Faktoren. In diesem Zeitraum bisher: ' +
+          all.length + (all.length === 1 ? ' Nacht.' : ' Nächte.')
       });
       return out;
     }
 
-    var win = lastNDays(all, 14, todayKey);
-    if (win.length < MIN_FOR_AVERAGES) win = all.slice(-14);
+    var win = lastNDays(all, span, todayKey);
+    if (win.length < MIN_FOR_AVERAGES) win = all.slice(-span);
     var s = summarize(win, goal);
 
     // 1. Durchschnitt gegen Ziel
@@ -480,7 +485,7 @@
     out.push({
       kind: 'average', tone: Math.abs(diff) <= 15 ? 'good' : (diff < 0 ? 'watch' : 'info'),
       title: 'Durchschnitt: ' + formatDuration(s.avgSleep),
-      text: 'In ' + s.count + ' erfassten Nächten der letzten 14 Tage hast du im Schnitt ' + formatDuration(s.avgSleep) +
+      text: 'In ' + s.count + ' erfassten Nächten der letzten ' + span + ' Tage hast du im Schnitt ' + formatDuration(s.avgSleep) +
         ' geschlafen. Das sind ' + formatDuration(Math.abs(diff)) + (diff < 0 ? ' weniger' : ' mehr') +
         ' als dein Ziel von ' + formatDuration(goal) + '.'
     });
@@ -586,12 +591,13 @@
   /**
    * Höchstens zwei Empfehlungen, nach geschätztem Hebel sortiert.
    */
-  function buildRecommendations(entries, settings, todayKey) {
+  function buildRecommendations(entries, settings, todayKey, windowDays) {
     var goal = settings.goalMin;
+    var span = windowDays || 14;
     var all = sortEntries(entries);
     if (all.length < 7) return [];
-    var win = lastNDays(all, 14, todayKey);
-    if (win.length < 5) win = all.slice(-14);
+    var win = lastNDays(all, span, todayKey);
+    if (win.length < 5) win = all.slice(-span);
     var s = summarize(win, goal);
     var recs = [];
 

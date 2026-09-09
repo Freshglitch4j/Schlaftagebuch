@@ -13,7 +13,7 @@
   var KEY_SETTINGS = 'schlaftagebuch.settings.v1';
   var KEY_BACKUP = 'schlaftagebuch.backup.v1';
   var KEY_PLANNED = 'schlaftagebuch.planned.v1';
-  var APP_VERSION = 'v6';
+  var APP_VERSION = 'v7';
 
   var $ = function (sel) { return document.querySelector(sel); };
   var $$ = function (sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); };
@@ -323,9 +323,10 @@
     var planned = isPlannedDate(state.date);
     var isLast = state.date === lastNight();
     var isBefore = state.date === C.addDays(lastNight(), -1);
+    $('#dayDow').textContent = C.formatDate(state.date, 'dow');
     $('#dayTitle').textContent = planned ? 'Kommende Nacht'
       : (isLast ? 'Letzte Nacht' : (isBefore ? 'Vorletzte Nacht' : 'Nacht auf ' + C.formatDate(C.addDays(state.date, 1), 'short')));
-    $('#daySub').textContent = C.formatDate(state.date, 'long') +
+    $('#daySub').textContent = C.formatDate(state.date, 'plain') +
       ' → ' + C.formatDate(C.addDays(state.date, 1), 'short');
     $('#dayNext').disabled = state.date >= navMax();
     $('#dayPrev').disabled = false;
@@ -354,29 +355,29 @@
       function () { return d.awake; }, function (v) { d.awake = v; });
     buildChips();
 
-    // Hero
+    // Hero – erst zeigen, wenn für diese Nacht wirklich etwas vorliegt
     var der = C.derive(d);
     var goal = state.settings.goalMin, minimum = state.settings.minMin;
     var bar = $('#nightBar');
     bar.innerHTML = '';
-    if (der && der.timeInBed > 0 && der.timeInBed <= 16 * 60) {
+    var hasData = !!getEntry(state.date) || state.dirty;
+    $('#emptyNight').hidden = planned || hasData;
+    $('#hero').hidden = planned || !hasData;
+    if (hasData && der && der.timeInBed > 0 && der.timeInBed <= 16 * 60) {
       var h = Math.floor(der.sleep / 60), m = der.sleep % 60;
       $('#heroNum').textContent = h + ':' + String(m).padStart(2, '0');
       $('#heroNum').className = 'hero-num v-' + statusClass(der.sleep);
       $('#heroUnit').textContent = 'h';
 
-      var total = der.timeInBed;
-      // Die Skala reicht immer mindestens bis über das Ziel hinaus. So sind
-      // beide Striche stets sichtbar und die Balken verschiedener Nächte
-      // lassen sich miteinander vergleichen.
-      var axisMax = Math.ceil(Math.max(total, goal + 30) / 30) * 30;
-      function seg(cls, min) {
-        if (min <= 0) return;
-        bar.appendChild(el('div', { class: 'seg ' + cls, style: 'width:' + (min / axisMax * 100) + '%' }));
-      }
-      seg('seg-idle', der.latency);
-      seg('seg-sleep is-' + statusClass(der.sleep), der.sleep);
-      seg('seg-idle', der.awake);
+      // Der Balken zeigt ausschließlich die geschlafene Zeit. Einschlafzeit
+      // und nächtliches Wachliegen bleiben draußen – sonst wäre die Skala
+      // eine Mischung aus Uhrzeit und Dauer und stimmte nirgends.
+      var sleep = der.sleep;
+      var axisMax = Math.ceil(Math.max(sleep, goal + 30) / 30) * 30;
+      bar.appendChild(el('div', {
+        class: 'seg seg-sleep is-' + statusClass(sleep),
+        style: 'width:' + (sleep / axisMax * 100) + '%'
+      }));
       [minimum, goal].forEach(function (v) {
         if (v > 0 && v <= axisMax) bar.appendChild(el('div', { class: 'mark', style: 'left:' + (v / axisMax * 100) + '%' }));
       });
@@ -389,7 +390,7 @@
         scale.appendChild(el('i', { style: 'left:' + (hh * 60 / axisMax * 100) + '%', text: hh + 'h' }));
       }
       $('#barHint').innerHTML =
-        'Balken = Zeit im Bett, schraffiert = wach gelegen. Striche: ' +
+        'Balken = geschlafene Zeit. Striche: ' +
         '<b>Minimum ' + C.formatDuration(minimum, { short: true }) + '</b> und ' +
         '<b>Ziel ' + C.formatDuration(goal, { short: true }) + '</b>.';
     } else {
@@ -397,7 +398,7 @@
       $('#heroNum').className = 'hero-num';
       $('#heroUnit').textContent = '';
       $('#barScale').innerHTML = '';
-      $('#barHint').textContent = 'Bitte die Zeiten prüfen.';
+      $('#barHint').textContent = hasData ? 'Bitte die Zeiten prüfen.' : '';
     }
 
     // Warnungen und Fehler
@@ -418,7 +419,7 @@
       $('#btnDeleteEntry').style.display = hasPlan ? '' : 'none';
       $('#entryWarnings').innerHTML = '';
     } else {
-      $('#btnSave').textContent = exists ? 'Änderungen speichern' : 'Nacht speichern';
+      $('#btnSave').textContent = exists ? 'Änderungen speichern' : 'Daten speichern';
       $('#btnDeleteEntry').textContent = 'Diesen Eintrag löschen';
       $('#btnDeleteEntry').style.display = exists ? '' : 'none';
     }
@@ -428,15 +429,14 @@
   // Der Speicherknopf erscheint nur, wenn es etwas zu speichern gibt:
   // bei einer noch nicht erfassten Nacht oder nach einer Änderung.
   function shouldShowSave() {
-    if (state.view !== 'night') return false;
-    if (state.dirty) return true;
-    return isPlannedDate(state.date)
-      ? !(state.planned && state.planned.date === state.date)
-      : !getEntry(state.date);
+    return state.view === 'night' && state.dirty;
   }
 
   function updateSaveBar() {
-    $('#saveBar').classList.toggle('is-visible', shouldShowSave());
+    var on = shouldShowSave();
+    $('#saveBar').classList.toggle('is-visible', on);
+    // Zusätzlicher Abstand am Seitenende, damit die Leiste nichts verdeckt
+    document.body.classList.toggle('has-savebar', on);
   }
 
   // „nicht bekannt“ gilt für beide Felder gemeinsam
@@ -646,15 +646,21 @@
   function addXLabels(svg, series, x, H, days) {
     var step = days <= 10 ? 1 : (days <= 31 ? 5 : 15);
     var last = series.length - 1;
-    series.forEach(function (p, i) {
-      var regular = (last - i) % step === 0;
-      // Ganz links immer ein Datum, aber nur wenn es nicht mit dem
-      // nächsten regulären Wert kollidiert.
-      var firstOne = i === 0 && !regular && (last % step) >= Math.ceil(step / 2);
-      if (!regular && !firstOne) return;
+    var idx = [];
+    for (var i = last; i >= 0; i -= step) idx.push(i);
+    idx.reverse();
+
+    // Ganz links soll immer ein Datum stehen. Steht die nächste reguläre
+    // Beschriftung zu dicht daneben, weicht sie – sonst kleben die Zahlen.
+    if (idx[0] !== 0) {
+      if (x(idx[0]) - x(0) < 50) idx.shift();
+      idx.unshift(0);
+    }
+
+    idx.forEach(function (i) {
       svg.appendChild(s('text', { x: x(i), y: H - 6,
-        'text-anchor': i === 0 ? 'start' : 'middle', 'font-size': 9,
-        fill: 'var(--text-faint)', text: C.formatDate(p.date, 'short') }));
+        'text-anchor': i === 0 ? 'start' : (i === last ? 'end' : 'middle'), 'font-size': 9,
+        fill: 'var(--text-faint)', text: C.formatDate(series[i].date, 'short') }));
     });
   }
 
@@ -670,8 +676,8 @@
     });
   }
 
-  function scatterChart() {
-    var items = C.summarize(state.entries, state.settings.goalMin).items || [];
+  function scatterChart(entries) {
+    var items = C.summarize(entries, state.settings.goalMin).items || [];
     if (items.length < C.MIN_FOR_CORRELATION) return null;
     var useSleep = state.scatterX === 'sleep';
     var xs = items.map(function (it) { return useSleep ? it.d.sleep : C.toNightAxis(C.toMin(it.bed)); });
@@ -714,9 +720,9 @@
     return { svg: svg, r: r, n: items.length };
   }
 
-  function factorChart() {
+  function factorChart(entries) {
     var active = state.settings.factors || C.DEFAULT_FACTORS;
-    var rows = active.map(function (f) { return C.factorComparison(state.entries, f); })
+    var rows = active.map(function (f) { return C.factorComparison(entries, f); })
       .filter(function (c) { return c.enough && c.quality; });
     if (!rows.length) return null;
 
@@ -761,8 +767,8 @@
   }
 
   function rangeTabs() {
-    var tabs = el('div', { class: 'tabs' });
-    [10, 30, 90].forEach(function (r) {
+    var tabs = el('div', { class: 'tabs tabs-wrap' });
+    [5, 10, 20, 30, 60, 90].forEach(function (r) {
       tabs.appendChild(el('button', { type: 'button', text: r + ' Tage', 'aria-pressed': String(state.range === r),
         onclick: function () { state.range = r; state.selectedDay = null; renderStats(); } }));
     });
@@ -835,82 +841,32 @@
           (st.avgSleep >= goal ? '+' : '−') + C.formatDuration(Math.abs(st.avgSleep - goal)) + ' zum Ziel',
           'v-' + statusClass(st.avgSleep)),
         statBlock('Ø Schlafqualität', st.avgQuality.toFixed(1) + ' <small>/ 10</small>', qualityWord(st.avgQuality)),
-        statBlock('Nächte erfasst', st.count + ' <small>von ' + state.range + '</small>',
-          Math.round(st.count / state.range * 100) + ' % lückenlos'),
-        statBlock('Ziel erreicht', st.goalHit + ' <small>von ' + st.count + '</small>',
-          st.items.filter(function (x) { return x.d.sleep < minimum; }).length + ' Nächte unter Minimum')
+        statBlock('Ø Einschlafzeit', C.formatDuration(st.avgLatency), 'bis zum Einschlafen'),
+        statBlock('Ø Wachzeit', C.formatDuration(st.avgAwake), 'nachts wach gelegen'),
+        statBlock('Ziel erreicht', Math.round(st.goalRate * 100) + ' <small>%</small>',
+          st.goalHit + ' von ' + st.count + ' Nächten',
+          st.goalRate >= 0.6 ? 'v-ok' : 'v-mid'),
+        statBlock('Nächte erfasst', Math.round(st.count / state.range * 100) + ' <small>%</small>',
+          st.count + ' von ' + state.range + ' Tagen')
       ]));
+      var underMin = st.items.filter(function (x) { return x.d.sleep < minimum; }).length;
+      var debt = st.debt;
+      kCard.appendChild(el('p', { class: 'note-small',
+        text: (underMin ? underMin + (underMin === 1 ? ' Nacht lag' : ' Nächte lagen') + ' unter deinem Minimum von ' +
+                C.formatDuration(minimum, { short: true }) + '. ' : 'Keine Nacht lag unter deinem Minimum. ') +
+              (debt > 0
+                ? 'Über den Zeitraum fehlen gegenüber dem Ziel rechnerisch ' + C.formatDuration(debt) + '. ' +
+                  'Das ist eine einfache Summe der Differenzen, kein medizinischer Wert – Schlaf lässt sich nicht eins zu eins nachholen.'
+                : 'Über den Zeitraum liegst du in Summe ' + C.formatDuration(-debt) + ' über deinem Ziel.') }));
     } else {
       kCard.appendChild(el('p', { class: 'note-small', text: 'In diesem Zeitraum liegen keine Einträge vor.' }));
     }
     body.appendChild(kCard);
 
-    // --- 4. Letzte Nacht --------------------------------------------------
-    var last = C.sortEntries(state.entries)[state.entries.length - 1];
-    var lastD = C.derive(last);
-    var lastCard = el('div', { class: 'card' }, [
-      el('h2', { text: last.date === maxDate() ? 'Letzte Nacht' : 'Zuletzt erfasst · Nacht auf ' + C.formatDate(C.addDays(last.date, 1), 'short') })
-    ]);
-    lastCard.appendChild(el('div', { class: 'statgrid' }, [
-      statBlock('Geschlafen', C.formatDuration(lastD.sleep),
-        (lastD.sleep >= goal ? '+' : '−') + C.formatDuration(Math.abs(lastD.sleep - goal)) + ' zum Ziel',
-        'v-' + statusClass(lastD.sleep)),
-      statBlock('Qualität', last.quality + ' <small>/ 10</small>', qualityWord(last.quality)),
-      statBlock('Im Bett', last.bed + ' – ' + last.wake, C.formatDuration(lastD.timeInBed) + ' insgesamt'),
-      statBlock('Effizienz', Math.round(lastD.efficiency * 100) + ' <small>%</small>',
-        C.formatDuration(lastD.latency + lastD.awake) + ' wach im Bett')
-    ]));
-    body.appendChild(lastCard);
-
-    // --- 5. Sieben und dreißig Tage --------------------------------------
-    [7, 30].forEach(function (winDays) {
-      var sub = C.lastNDays(state.entries, winDays, maxDate());
-      var w = C.summarize(sub, goal);
-      var card = el('div', { class: 'card' }, [
-        el('h2', { text: 'Letzte ' + winDays + ' Tage · ' + w.count + ' Nächte erfasst' })
-      ]);
-      if (!w.count) {
-        card.appendChild(el('p', { class: 'note-small', text: 'In diesem Zeitraum liegen keine Einträge vor.' }));
-        body.appendChild(card);
-        return;
-      }
-      card.appendChild(el('div', { class: 'statgrid' }, [
-        statBlock('Ø Schlafdauer', C.formatDuration(w.avgSleep),
-          (w.avgSleep >= goal ? '+' : '−') + C.formatDuration(Math.abs(w.avgSleep - goal)) + ' zum Ziel',
-          'v-' + statusClass(w.avgSleep)),
-        statBlock('Ø Qualität', w.avgQuality.toFixed(1) + ' <small>/ 10</small>', qualityWord(w.avgQuality)),
-        statBlock('Ziel erreicht', w.goalHit + ' <small>von ' + w.count + '</small>',
-          Math.round(w.goalRate * 100) + ' % der Nächte'),
-        statBlock('Ø ins Bett', w.meanBed, w.bedSd === null ? '' : 'schwankt ± ' + Math.round(w.bedSd) + ' min')
-      ]));
-
-      if (winDays === 30) {
-        var half = C.lastNDays(state.entries, 15, maxDate());
-        var prevFrom = C.addDays(maxDate(), -29), prevTo = C.addDays(maxDate(), -15);
-        var prev = state.entries.filter(function (e) { return e.date >= prevFrom && e.date <= prevTo; });
-        if (half.length >= 5 && prev.length >= 5) {
-          var a = C.summarize(half, goal).avgSleep, b = C.summarize(prev, goal).avgSleep;
-          var delta = a - b;
-          card.appendChild(el('div', { class: 'stat', style: 'margin-top:14px' }, [
-            el('div', { class: 'k', text: 'Trend' }),
-            el('div', { class: 'v', text: (delta >= 0 ? '+' : '−') + C.formatDuration(Math.abs(delta)) }),
-            el('div', { class: 'd', text: 'letzte 15 Nächte gegenüber den 15 davor' })
-          ]));
-        }
-        var debt = C.summarize(C.lastNDays(state.entries, 14, maxDate()), goal).debt;
-        card.appendChild(el('p', { class: 'note-small',
-          text: debt > 0
-            ? 'Rechnerisch fehlen dir über die letzten 14 Tage ' + C.formatDuration(debt) + ' gegenüber deinem Ziel. ' +
-              'Das ist eine einfache Summe der Differenzen, kein medizinischer Wert – Schlaf lässt sich nicht eins zu eins nachholen.'
-            : 'Über die letzten 14 Tage liegst du in Summe ' + C.formatDuration(-debt) + ' über deinem Ziel.' }));
-      }
-      body.appendChild(card);
-    });
-
     // --- 6. Erkenntnisse --------------------------------------------------
-    var insights = C.buildInsights(state.entries, state.settings, maxDate());
+    var insights = C.buildInsights(win, state.settings, maxDate(), state.range);
     if (insights.length) {
-      var ic = el('div', { class: 'card' }, [el('h2', { text: 'Was in deinen Daten steht' })]);
+      var ic = el('div', { class: 'card' }, [el('h2', { text: 'Was in deinen Daten steht · letzte ' + state.range + ' Tage' })]);
       insights.forEach(function (i) {
         ic.appendChild(el('div', { class: 'insight ' + i.tone }, [
           el('h3', { text: i.title }),
@@ -921,7 +877,7 @@
     }
 
     // --- 7. Empfehlungen --------------------------------------------------
-    var recs = C.buildRecommendations(state.entries, state.settings, maxDate());
+    var recs = C.buildRecommendations(win, state.settings, maxDate(), state.range);
     if (recs.length) {
       var rc = el('div', { class: 'card' }, [el('h2', { text: 'Wo du ansetzen könntest' })]);
       recs.forEach(function (r) {
@@ -933,9 +889,9 @@
     }
 
     // --- 8. Faktorvergleich ------------------------------------------------
-    var fc = factorChart();
+    var fc = factorChart(win);
     if (fc) {
-      var fcard = el('div', { class: 'card' }, [el('h2', { text: 'Qualität mit und ohne Faktor' })]);
+      var fcard = el('div', { class: 'card' }, [el('h2', { text: 'Qualität mit und ohne Faktor · letzte ' + state.range + ' Tage' })]);
       fcard.appendChild(el('div', { class: 'chart-wrap' }, [fc]));
       fcard.appendChild(el('div', { class: 'legend', html:
         '<span><i class="swatch" style="background:var(--accent)"></i>Nächte mit dem Faktor</span>' +
@@ -946,7 +902,7 @@
     }
 
     // --- 9. Streudiagramm --------------------------------------------------
-    var sc = scatterChart();
+    var sc = scatterChart(win);
     if (sc) {
       var scard = el('div', { class: 'card' }, [el('h2', { text: 'Was hängt mit deiner Bewertung zusammen?' })]);
       var stabs = el('div', { class: 'tabs' });
@@ -1026,9 +982,21 @@
     var list = state.settings.factorList;
     var active = state.settings.factors;
 
-    list.forEach(function (f) {
+    var listBox = el('div', { class: 'factor-list' });
+    list.forEach(function (f, index) {
       var used = state.entries.some(function (e) { return (e.factors || []).indexOf(f.id) >= 0; });
       var row = el('div', { class: 'factor-row' });
+      row.dataset.index = index;
+
+      row.appendChild(el('button', {
+        class: 'grip', type: 'button', text: '⠿',
+        'aria-label': 'Faktor „' + f.label + '“ verschieben. Mit den Pfeiltasten oder durch Ziehen.',
+        onkeydown: function (ev) {
+          if (ev.key === 'ArrowUp') { ev.preventDefault(); moveFactor(index, index - 1); }
+          if (ev.key === 'ArrowDown') { ev.preventDefault(); moveFactor(index, index + 1); }
+        },
+        onpointerdown: function (ev) { startFactorDrag(ev, listBox, index); }
+      }));
 
       row.appendChild(el('input', {
         type: 'checkbox', checked: active.indexOf(f.id) >= 0 ? 'checked' : null,
@@ -1079,8 +1047,9 @@
         }
       }));
 
-      facCard.appendChild(row);
+      listBox.appendChild(row);
     });
+    facCard.appendChild(listBox);
 
     var full = list.length >= C.MAX_FACTORS;
     var addField = el('input', {
@@ -1109,7 +1078,8 @@
     ]));
 
     facCard.appendChild(el('p', { class: 'note-small',
-      text: 'Angehakte Faktoren erscheinen beim Eintrag. Namen lassen sich jederzeit ändern – gespeicherte Nächte bleiben dabei richtig zugeordnet. ' +
+      text: 'Die Reihenfolge lässt sich am Griff links ziehen; damit ändert sich auch die Reihenfolge im Eintrag. ' +
+        'Angehakte Faktoren erscheinen beim Eintrag. Namen lassen sich jederzeit ändern – gespeicherte Nächte bleiben dabei richtig zugeordnet. ' +
         'Ein Faktor, der schon in einer Nacht vorkommt, lässt sich nicht löschen, sondern nur ausblenden. ' +
         'Möglich sind bis zu ' + C.MAX_FACTORS + ' Faktoren (aktuell ' + list.length + '). ' +
         'Bedenke: Jeder Faktor braucht mindestens fünf Nächte mit und fünf ohne, bevor die Auswertung etwas dazu sagen kann.' }));
@@ -1170,6 +1140,65 @@
         'Sichere deshalb regelmäßig die JSON-Datei.<br><br>' +
         'Die Hinweise in der Auswertung beschreiben Muster in deinen eigenen Zahlen. Sie sind keine Diagnose und ersetzen keine ärztliche Beratung.' })
     ]));
+  }
+
+  // Faktoren umsortieren -------------------------------------------------
+
+  function moveFactor(from, to) {
+    var list = state.settings.factorList;
+    if (to < 0 || to >= list.length || from === to) return;
+    var item = list.splice(from, 1)[0];
+    list.splice(to, 0, item);
+    saveSettings();
+    renderNight();
+    renderMore();
+    var grips = $$('#moreBody .grip');
+    if (grips[to]) grips[to].focus();
+  }
+
+  // Ziehen per Zeigereignis – funktioniert mit Finger und Maus gleichermaßen
+  function startFactorDrag(ev, listBox, index) {
+    var rows = Array.prototype.slice.call(listBox.children);
+    var row = rows[index];
+    if (!row || rows.length < 2) return;
+    ev.preventDefault();
+    var rowH = row.getBoundingClientRect().height || 54;
+    var startY = ev.clientY;
+    var target = index;
+
+    row.classList.add('is-dragging');
+    listBox.classList.add('is-sorting');
+    if (ev.target.setPointerCapture) {
+      try { ev.target.setPointerCapture(ev.pointerId); } catch (e) {}
+    }
+
+    function onMove(e) {
+      var delta = e.clientY - startY;
+      target = Math.max(0, Math.min(rows.length - 1, index + Math.round(delta / rowH)));
+      row.style.transform = 'translateY(' + delta + 'px)';
+      // Die übersprungenen Zeilen weichen sichtbar aus
+      rows.forEach(function (other, i) {
+        if (i === index) return;
+        var shift = 0;
+        if (index < target && i > index && i <= target) shift = -rowH;
+        if (index > target && i < index && i >= target) shift = rowH;
+        other.style.transform = shift ? 'translateY(' + shift + 'px)' : '';
+      });
+    }
+
+    function onUp() {
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      document.removeEventListener('pointercancel', onUp);
+      rows.forEach(function (r) { r.style.transform = ''; });
+      row.classList.remove('is-dragging');
+      listBox.classList.remove('is-sorting');
+      if (target !== index) moveFactor(index, target);
+    }
+
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+    document.addEventListener('pointercancel', onUp);
   }
 
   function setGoal(min) {
@@ -1366,7 +1395,14 @@
     show('night');
   }
 
-  function touch() { state.dirty = true; updateSaveBar(); }
+  function touch() {
+    var wasClean = !state.dirty;
+    state.dirty = true;
+    updateSaveBar();
+    // Bei der allerersten Änderung tritt der Hauptbildschirm aus dem
+    // Leerzustand heraus – danach genügt das reine Aktualisieren.
+    if (wasClean && state.view === 'night') renderNight();
+  }
 
   function renderAll() {
     if (state.date > navMax()) state.date = navMax();
@@ -1574,7 +1610,7 @@
   else init();
 
   window.__app = { state: state, show: show, openDate: openDate, saveDraft: saveDraft,
-    renderStats: renderStats, renderMore: renderMore, maxDate: maxDate,
+    renderStats: renderStats, renderMore: renderMore, maxDate: maxDate, moveFactor: moveFactor,
     lastNight: lastNight, navMax: navMax, KEY_PLANNED: KEY_PLANNED,
     handleImportFile: handleImportFile, loadDemo: loadDemo,
     KEY_ENTRIES: KEY_ENTRIES, KEY_SETTINGS: KEY_SETTINGS };

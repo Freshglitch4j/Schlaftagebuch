@@ -34,7 +34,7 @@
         <button class="iconbtn" id="dayPrev" aria-label="Eine Nacht zurück">‹</button>
       </div>
       <div class="daytitle">
-        <h1 id="dayTitle">Letzte Nacht</h1>
+        <h1><span class="dow" id="dayDow">Mo</span><span id="dayTitle">Letzte Nacht</span></h1>
         <div class="sub" id="daySub">–</div>
       </div>
       <button class="iconbtn" id="dayNext" aria-label="Eine Nacht vor">›</button>
@@ -44,6 +44,11 @@
       <strong>Kommende Nacht</strong>
       <span>Du kannst schon vormerken, wann du ins Bett gehst, wie warm es ist und was heute Besonderes war.
       Morgen früh ergänzt du nur noch den Rest.</span>
+    </div>
+
+    <div class="empty-night" id="emptyNight" hidden>
+      <strong>Keine Daten vorhanden</strong>
+      <span>Trage deine Daten unten ein und klicke auf „Daten speichern“.</span>
     </div>
 
     <div class="hero" id="hero">
