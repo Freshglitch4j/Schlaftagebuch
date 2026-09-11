@@ -13,7 +13,7 @@
   var KEY_SETTINGS = 'schlaftagebuch.settings.v1';
   var KEY_BACKUP = 'schlaftagebuch.backup.v1';
   var KEY_PLANNED = 'schlaftagebuch.planned.v1';
-  var APP_VERSION = 'v9';
+  var APP_VERSION = 'v10';
 
   var $ = function (sel) { return document.querySelector(sel); };
   var $$ = function (sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); };
@@ -451,8 +451,7 @@
   function renderTemps() {
     var d = state.draft;
     var unknown = tempsUnknown();
-    var box = $('#tempUnknown');
-    if (document.activeElement !== box) box.checked = unknown;
+    $('#tempUnknown').setAttribute('aria-pressed', String(unknown));
     [['#inTempBed', 'tempBed'], ['#inTempWake', 'tempWake']].forEach(function (pair) {
       var input = $(pair[0]);
       input.disabled = unknown;
@@ -1519,7 +1518,9 @@
       });
     });
 
-    $('#tempUnknown').addEventListener('change', function () { setTempsUnknown(this.checked); });
+    $('#tempUnknown').addEventListener('click', function () {
+      setTempsUnknown(this.getAttribute('aria-pressed') !== 'true');
+    });
 
     $('#inQuality').addEventListener('input', function () {
       state.draft.quality = parseInt(this.value, 10);

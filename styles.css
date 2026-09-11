@@ -370,23 +370,30 @@ body.has-savebar .app { padding-bottom: calc(162px + env(safe-area-inset-bottom)
 }
 .factor-add button:disabled { opacity: 0.4; }
 
-/* Ankreuzfeld unter den Temperaturen */
-.checkline {
-  /* inline-flex, damit nur Kästchen und Text anklickbar sind – nicht die
-     ganze Zeilenbreite. Sonst schaltet ein Fehltipp beim Scrollen um. */
+/* Ankreuzfeld unter den Temperaturen.
+   Bewusst ein <button> und kein <label>: Ein Label reicht jeden Klick in
+   seinem gesamten Bereich an das Ankreuzfeld weiter. Ein Knopf ist genau
+   so groß wie das, was man sieht – daneben passiert nichts. */
+.checkline { margin-top: 10px; }
+.chip-check {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  min-height: 44px;
-  margin-top: 6px;
-  font-size: 14px;
-  color: var(--text-dim);
-  cursor: pointer;
+  gap: 9px;
+  padding: 0 16px 0 12px;
 }
-.checkline input[type="checkbox"] {
-  width: 22px; height: 22px; flex: 0 0 22px;
-  accent-color: var(--accent);
-  margin: 0;
+.chip-check .box {
+  width: 18px; height: 18px; flex: 0 0 18px;
+  border: 2px solid currentColor; border-radius: 5px;
+  position: relative;
+}
+.chip-check[aria-pressed="true"] .box { background: var(--accent); border-color: var(--accent); }
+.chip-check[aria-pressed="true"] .box::after {
+  content: "";
+  position: absolute; left: 4px; top: 0;
+  width: 5px; height: 10px;
+  border: solid var(--accent-ink);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
 }
 .timeinput.is-off { opacity: 0.4; }
 .timeinput.is-off input, .timeinput.is-off .stepbtn { pointer-events: none; }

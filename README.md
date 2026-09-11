@@ -356,7 +356,7 @@ Nacht. Die Vormerkung ist bewusst getrennt, damit sie keine Statistik verfälsch
 
 Die Rechenlogik in `core.js` ist bewusst vom Rest getrennt und mit 167
 automatischen Tests abgedeckt (`node tools/test-core.js`), die Oberfläche mit
-weiteren 269 (`node tools/test-ui.js`, benötigt `npm install jsdom`).
+weiteren 274 (`node tools/test-ui.js`, benötigt `npm install jsdom`).
 
 Die Hinweise in der Auswertung beschreiben Muster in deinen eigenen Zahlen. Sie
 sind keine Diagnose und ersetzen keine ärztliche Beratung. Bei anhaltenden
