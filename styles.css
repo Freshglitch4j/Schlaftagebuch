@@ -372,7 +372,9 @@ body.has-savebar .app { padding-bottom: calc(162px + env(safe-area-inset-bottom)
 
 /* Ankreuzfeld unter den Temperaturen */
 .checkline {
-  display: flex;
+  /* inline-flex, damit nur Kästchen und Text anklickbar sind – nicht die
+     ganze Zeilenbreite. Sonst schaltet ein Fehltipp beim Scrollen um. */
+  display: inline-flex;
   align-items: center;
   gap: 10px;
   min-height: 44px;

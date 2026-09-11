@@ -13,7 +13,7 @@
   var KEY_SETTINGS = 'schlaftagebuch.settings.v1';
   var KEY_BACKUP = 'schlaftagebuch.backup.v1';
   var KEY_PLANNED = 'schlaftagebuch.planned.v1';
-  var APP_VERSION = 'v8';
+  var APP_VERSION = 'v9';
 
   var $ = function (sel) { return document.querySelector(sel); };
   var $$ = function (sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); };
@@ -56,6 +56,7 @@
     dirty: false,
     freeLatency: false,
     freeAwake: false,
+    tempStash: null,
     range: 30,
     scatterX: 'sleep',
     selectedDay: null
@@ -463,8 +464,16 @@
   function setTempsUnknown(unknown) {
     var d = state.draft;
     if (unknown) {
+      // Werte merken, damit ein versehentliches Ankreuzen nichts kostet
+      if (d.tempBed !== null || d.tempWake !== null) {
+        state.tempStash = { bed: d.tempBed, wake: d.tempWake };
+      }
       d.tempBed = null;
       d.tempWake = null;
+    } else if (state.tempStash) {
+      d.tempBed = state.tempStash.bed;
+      d.tempWake = state.tempStash.wake;
+      state.tempStash = null;
     } else {
       // Beim Aufklappen mit dem zuletzt gemessenen Wert starten
       if (d.tempBed === null || d.tempBed === undefined) {
@@ -1392,6 +1401,7 @@
     state.dirty = false;
     state.freeLatency = false;
     state.freeAwake = false;
+    state.tempStash = null;
     show('night');
   }
 

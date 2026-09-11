@@ -147,7 +147,8 @@ sind 42 Minuten.
 **Zimmertemperatur** stellst du wie die Uhrzeiten mit **−/+** ein, hier in
 Schritten von 0,1 °C. Direktes Eintippen geht auch. Wenn du keinen Wert hast,
 setz das Häkchen bei **nicht bekannt** – dann bleiben beide Felder leer und
-gesperrt. Hast du schon einmal eine Temperatur erfasst, schlägt die App beim
+gesperrt. Nimmst du das Häkchen wieder weg, stehen die vorher eingetippten
+Werte wieder da; ein Fehlgriff kostet also nichts. Hast du schon einmal eine Temperatur erfasst, schlägt die App beim
 nächsten Mal den zuletzt gemessenen Wert vor.
 
 ### Abends vormerken
@@ -355,7 +356,7 @@ Nacht. Die Vormerkung ist bewusst getrennt, damit sie keine Statistik verfälsch
 
 Die Rechenlogik in `core.js` ist bewusst vom Rest getrennt und mit 167
 automatischen Tests abgedeckt (`node tools/test-core.js`), die Oberfläche mit
-weiteren 264 (`node tools/test-ui.js`, benötigt `npm install jsdom`).
+weiteren 269 (`node tools/test-ui.js`, benötigt `npm install jsdom`).
 
 Die Hinweise in der Auswertung beschreiben Muster in deinen eigenen Zahlen. Sie
 sind keine Diagnose und ersetzen keine ärztliche Beratung. Bei anhaltenden
