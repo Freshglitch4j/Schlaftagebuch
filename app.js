@@ -14,7 +14,7 @@
   var KEY_BACKUP = 'schlaftagebuch.backup.v1';
   var KEY_PLANNED = 'schlaftagebuch.planned.v1';
   var KEY_DRAFT = 'schlaftagebuch.draft.v1';
-  var APP_VERSION = 'v14';
+  var APP_VERSION = 'v15';
 
   var $ = function (sel) { return document.querySelector(sel); };
   var $$ = function (sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); };
@@ -254,9 +254,14 @@
   }
 
   function renderScore(value) {
-    var box = $('#scoreNum').parentNode;
+    var cls = scoreClass(value);
     $('#scoreNum').textContent = value === null ? '–' : value;
-    box.className = 'score-val is-' + scoreClass(value);
+    $('#scoreNum').parentNode.className = 'score-val is-' + cls;
+    // Auch der Schieberegler selbst zeigt die Bewertung an
+    $('#qualVal').textContent = value === null ? '–' : value;
+    $('#qualVal').className = 'quality-val is-' + cls;
+    $('#qualWord').textContent = value === null ? '' : recoveryWord(value);
+    $('#inQuality').className = 'is-' + cls;
   }
 
   function statusClass(sleepMin) {
@@ -409,8 +414,6 @@
     $('#inBed').value = d.bed;
     $('#inWake').value = d.wake;
     $('#inQuality').value = d.quality;
-    $('#qualVal').textContent = d.quality;
-    $('#qualWord').textContent = ' · ' + recoveryWord(d.quality);
     if (document.activeElement !== $('#inNote')) $('#inNote').value = d.note || '';
     renderTemps();
 
@@ -1557,19 +1560,16 @@
   /* ------------------------------------------------------------- Wischen */
 
   // Reihenfolge der Seiten: … ‹ Tage › · Auswertung · Einstellungen
+  // Gewischt wird ausschließlich zwischen den Nächten. Die anderen Reiter
+  // erreicht man über die Leiste unten – dort hilft ein Wisch nicht weiter.
   function pageForward() {
-    if (state.view === 'night') {
-      if (state.date < navMax()) goToDate(C.addDays(state.date, 1));
-      else goToView('stats');
-    } else if (state.view === 'stats') {
-      show('more');
-    }
+    if (state.view !== 'night') return;
+    if (state.date < navMax()) goToDate(C.addDays(state.date, 1));
   }
 
   function pageBack() {
-    if (state.view === 'more') show('stats');
-    else if (state.view === 'stats') show('night');
-    else goToDate(C.addDays(state.date, -1));
+    if (state.view !== 'night') return;
+    goToDate(C.addDays(state.date, -1));
   }
 
   // Elemente, auf denen ein Wischen etwas anderes bedeutet
@@ -1735,8 +1735,6 @@
     $('#inQuality').addEventListener('input', function () {
       state.draft.quality = parseInt(this.value, 10);
       touch();
-      $('#qualVal').textContent = state.draft.quality;
-      $('#qualWord').textContent = ' · ' + recoveryWord(state.draft.quality);
       renderScore(state.draft.quality);
     });
 

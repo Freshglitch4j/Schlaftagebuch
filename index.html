@@ -71,6 +71,7 @@
     <div id="entryWarnings"></div>
 
     <div class="field">
+      <span class="lbl">Zeiten</span>
       <div class="timerow">
         <div class="timecell">
           <div class="lbl">Ins Bett</div>
@@ -89,6 +90,35 @@
           </div>
         </div>
       </div>
+    </div>
+
+    <div class="field" id="fieldLatency">
+      <span class="lbl">Einschlafzeit</span>
+      <div class="segmented" id="segLatency" role="group" aria-label="Einschlafzeit"></div>
+      <div class="freeinput" id="freeLatency" hidden>
+        <input type="number" id="inLatency" min="0" max="600" step="1" inputmode="numeric"
+               aria-label="Einschlafzeit in Minuten">
+        <span>Minuten zum Einschlafen</span>
+      </div>
+    </div>
+
+    <div class="field" id="fieldAwake">
+      <span class="lbl">Nachts wach gelegen</span>
+      <div class="segmented" id="segAwake" role="group" aria-label="Wachzeit in der Nacht"></div>
+      <div class="freeinput" id="freeAwake" hidden>
+        <input type="number" id="inAwake" min="0" max="600" step="1" inputmode="numeric"
+               aria-label="Wachzeit in Minuten">
+        <span>Minuten wach gelegen</span>
+      </div>
+    </div>
+
+    <div class="field" id="fieldQuality">
+      <div class="quality-head">
+        <span class="lbl">Erholung</span>
+        <span class="quality-read"><span class="quality-val" id="qualVal">7</span><span class="quality-word" id="qualWord"></span></span>
+      </div>
+      <input type="range" id="inQuality" min="1" max="10" step="1" value="7" aria-label="Erholung von 1 bis 10">
+      <div class="scale-hint"><span>wie gerädert</span><span>top erholt</span></div>
     </div>
 
     <div class="field" id="fieldTemp">
@@ -126,37 +156,8 @@
       </div>
     </div>
 
-    <div class="field" id="fieldLatency">
-      <span class="lbl">Einschlafzeit</span>
-      <div class="segmented" id="segLatency" role="group" aria-label="Einschlafzeit"></div>
-      <div class="freeinput" id="freeLatency" hidden>
-        <input type="number" id="inLatency" min="0" max="600" step="1" inputmode="numeric"
-               aria-label="Einschlafzeit in Minuten">
-        <span>Minuten zum Einschlafen</span>
-      </div>
-    </div>
-
-    <div class="field" id="fieldAwake">
-      <span class="lbl">Nachts wach gelegen</span>
-      <div class="segmented" id="segAwake" role="group" aria-label="Wachzeit in der Nacht"></div>
-      <div class="freeinput" id="freeAwake" hidden>
-        <input type="number" id="inAwake" min="0" max="600" step="1" inputmode="numeric"
-               aria-label="Wachzeit in Minuten">
-        <span>Minuten wach gelegen</span>
-      </div>
-    </div>
-
-    <div class="field" id="fieldQuality">
-      <div class="quality-head">
-        <span class="lbl" style="margin:0">Wie fühlst du dich?</span>
-        <span><span class="quality-val" id="qualVal">7</span><span class="quality-word" id="qualWord"></span></span>
-      </div>
-      <input type="range" id="inQuality" min="1" max="10" step="1" value="7" aria-label="Erholung von 1 bis 10">
-      <div class="scale-hint"><span>1 · wie gerädert</span><span>10 · top erholt</span></div>
-    </div>
-
     <div class="field">
-      <span class="lbl">Besondere Faktoren? <span style="color:var(--text-faint)">Nur antippen, was zutrifft</span></span>
+      <span class="lbl">Besondere Faktoren</span>
       <div class="chips" id="chipsFactors" role="group" aria-label="Tagesfaktoren"></div>
     </div>
 

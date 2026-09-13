@@ -117,8 +117,13 @@ Icon antippen. Oben steht die letzte Nacht, die Felder sind vorbelegt:
 - Was du am Vorabend vorgemerkt hast, steht bereits da.
 
 Also meistens: Zeiten mit **−/+** in 5-Minuten-Schritten korrigieren, die
-Qualität am Schieber einstellen, antippen was war, **Nacht speichern**. Für
+Erholung am Schieber einstellen, antippen was war, **Daten speichern**. Für
 größere Sprünge auf die Uhrzeit tippen – dann öffnet der Time Picker von Android.
+
+Die Felder stehen in der Reihenfolge, in der sie zusammengehören: zuerst alles,
+was die Schlafdauer bestimmt (Zeiten, Einschlafzeit, nächtliche Wachzeit), dann
+die **Erholung**, dann die Umstände (Temperatur, Faktoren, Notiz). Zahl und
+Schieberknopf der Erholung tragen dieselbe Ampelfarbe wie die Anzeige oben.
 
 Rechts oben im Kopf sitzt **letzte Nacht** – ein Sprung dorthin zurück, egal
 wie weit du geblättert hast. Wechselst du zu einem anderen Reiter und wieder
@@ -171,10 +176,10 @@ nächsten Mal den zuletzt gemessenen Wert vor.
 
 ### Wischen
 
-Nach links wischen führt vorwärts: einen Tag weiter, und an der letzten Nacht
-angekommen weiter zur **Auswertung** und zu den **Einstellungen**. Nach rechts
-geht es denselben Weg zurück und danach Nacht für Nacht in die Vergangenheit.
-Auf Schiebereglern, Eingabefeldern und Diagrammen wird nicht gewischt – dort
+Wischen blättert **zwischen den Nächten**: nach rechts in die Vergangenheit,
+nach links zurück bis zur letzten (abends bis zur kommenden) Nacht. Weiter geht
+es nicht – Auswertung und Einstellungen erreichst du über die Leiste unten.
+Auf Schiebereglern, Eingabefeldern und Diagrammen wird nicht gewischt, dort
 bedeutet die Geste etwas anderes.
 
 ### Abends vormerken
@@ -388,7 +393,7 @@ verfälschen.
 
 Die Rechenlogik in `core.js` ist bewusst vom Rest getrennt und mit 167
 automatischen Tests abgedeckt (`node tools/test-core.js`), die Oberfläche mit
-weiteren 373 (`node tools/test-ui.js`, benötigt `npm install jsdom`).
+weiteren 406 (`node tools/test-ui.js`, benötigt `npm install jsdom`).
 
 Die Hinweise in der Auswertung beschreiben Muster in deinen eigenen Zahlen. Sie
 sind keine Diagnose und ersetzen keine ärztliche Beratung. Bei anhaltenden
