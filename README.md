@@ -120,6 +120,12 @@ Also meistens: Zeiten mit **−/+** in 5-Minuten-Schritten korrigieren, die
 Qualität am Schieber einstellen, antippen was war, **Nacht speichern**. Für
 größere Sprünge auf die Uhrzeit tippen – dann öffnet der Time Picker von Android.
 
+Rechts oben im Kopf sitzt **Heute** – ein Sprung zurück zur letzten Nacht, egal
+wie weit du geblättert hast. Wechselst du zu einem anderen Reiter und wieder
+zurück, landest du auf dem zuletzt angesehenen Tag, nicht automatisch auf heute.
+
+Im Hauptblock steht rechts oben die **Erholung** dieser Nacht.
+
 Der Kopf zeigt drei Zeilen: eine kleine Einordnung (**Kommende Nacht**,
 **Letzte Nacht** oder **Frühere Nacht**), darunter Wochentag und Datum des
 Abends, darunter die volle Zeitspanne der Nacht. Wochentag und Datum haben
@@ -133,10 +139,9 @@ wegrutscht. Sobald du das erste Feld anfasst, füllt er sich, und unten kommt de
 Knopf **Daten speichern**. Ohne Änderung gibt es keinen Knopf und nichts zu
 speichern. Nach dem Speichern bleibst du auf der Seite.
 
-**Ungespeicherte Eingaben.** Beim Wechsel des Reiters bleiben sie einfach
-stehen – du findest sie unverändert vor, wenn du zurückkommst. Willst du dagegen
-den **Tag** wechseln, fragt die App nach: *Speichern und wechseln*,
-*Änderungen verwerfen* oder *Hierbleiben*. So kann nichts versehentlich
+**Ungespeicherte Eingaben.** Verlässt du die Nacht – egal ob du den Tag
+wechselst oder zu einem anderen Reiter gehst – fragt die App nach:
+*Speichern*, *Änderungen verwerfen* oder *Zurück*. So kann nichts versehentlich
 verlorengehen und nichts versehentlich stehenbleiben.
 
 Sollte die App abstürzen oder das Fenster zugehen, findet sie beim nächsten
@@ -222,13 +227,13 @@ oder 90.
   für das Ziel, gepunktete für das Minimum, dazu der 5-Tages-Schnitt. Für den
   Schnitt werden auch Nächte vor dem sichtbaren Bereich herangezogen, damit die
   Linie schon am linken Rand beginnt.
-- **Schlafqualität** – Bewertung pro Nacht und 5-Tages-Schnitt.
+- **Erholung** – Bewertung pro Nacht und 5-Tages-Schnitt.
 
 Tippe auf einen Balken, dann erscheinen die Details dieser Nacht unter dem
-Diagramm.
+Diagramm – samt Knopf **Diese Nacht ansehen**, der direkt zum Eintrag springt.
 
 Darunter folgt **ein** Kennzahlenblock mit den Durchschnitten für Schlafdauer,
-Schlafqualität, Einschlafzeit und Wachzeit sowie dem Anteil erreichter
+Erholung, Einschlafzeit und Wachzeit sowie dem Anteil erreichter
 Zielnächte und der Zahl erfasster Nächte. Danach die Texte: was in den Daten
 steht, wo du ansetzen könntest, der Faktorvergleich und das Streudiagramm.
 
@@ -381,7 +386,7 @@ verfälschen.
 
 Die Rechenlogik in `core.js` ist bewusst vom Rest getrennt und mit 167
 automatischen Tests abgedeckt (`node tools/test-core.js`), die Oberfläche mit
-weiteren 339 (`node tools/test-ui.js`, benötigt `npm install jsdom`).
+weiteren 361 (`node tools/test-ui.js`, benötigt `npm install jsdom`).
 
 Die Hinweise in der Auswertung beschreiben Muster in deinen eigenen Zahlen. Sie
 sind keine Diagnose und ersetzen keine ärztliche Beratung. Bei anhaltenden

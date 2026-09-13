@@ -38,7 +38,10 @@
         <h1><span class="dow" id="dayDow">Mo</span><span class="daydate" id="dayDate">07.09.</span></h1>
         <div class="sub" id="daySub">–</div>
       </div>
-      <button class="iconbtn" id="dayNext" aria-label="Eine Nacht vor">›</button>
+      <div class="daynav">
+        <button class="iconbtn" id="dayNext" aria-label="Eine Nacht vor">›</button>
+        <button class="iconbtn iconbtn-text" id="dayToday" aria-label="Zur letzten Nacht springen">Heute</button>
+      </div>
     </div>
 
     <div class="planned-note" id="plannedNote" hidden>
@@ -48,14 +51,21 @@
     </div>
 
     <div class="hero" id="hero">
-      <div class="hero-head" id="heroHead">Schlafdauer</div>
-      <div class="hero-figure">
-        <span class="hero-num" id="heroNum">–</span>
-        <span class="hero-unit" id="heroUnit">h</span>
+      <div class="hero-top">
+        <div class="hero-main">
+          <div class="hero-head" id="heroHead">Schlafdauer</div>
+          <div class="hero-figure">
+            <span class="hero-num" id="heroNum">–</span>
+            <span class="hero-unit" id="heroUnit">h</span>
+          </div>
+        </div>
+        <div class="hero-score">
+          <div class="hero-head">Erholung</div>
+          <div class="score-val"><span id="scoreNum">–</span><small>/10</small></div>
+        </div>
       </div>
       <div class="nightbar" id="nightBar" aria-hidden="true"></div>
       <div class="barscale" id="barScale" aria-hidden="true"></div>
-      <p class="nightbar-hint" id="barHint"></p>
     </div>
 
     <div id="entryWarnings"></div>
@@ -141,7 +151,7 @@
         <span class="lbl" style="margin:0">Wie fühlst du dich?</span>
         <span><span class="quality-val" id="qualVal">7</span><span class="quality-word" id="qualWord"></span></span>
       </div>
-      <input type="range" id="inQuality" min="1" max="10" step="1" value="7" aria-label="Schlafqualität von 1 bis 10">
+      <input type="range" id="inQuality" min="1" max="10" step="1" value="7" aria-label="Erholung von 1 bis 10">
       <div class="scale-hint"><span>1 · wie gerädert</span><span>10 · top erholt</span></div>
     </div>
 
@@ -196,9 +206,9 @@
 <dialog id="dlgLeave">
   <h2>Nicht gespeicherte Eingaben</h2>
   <p id="leaveText"></p>
-  <button class="btn btn-primary" id="leaveSave">Speichern und wechseln</button>
+  <button class="btn btn-primary" id="leaveSave">Speichern</button>
   <button class="btn" id="leaveDiscard">Änderungen verwerfen</button>
-  <button class="btn btn-quiet" id="leaveCancel">Hierbleiben</button>
+  <button class="btn btn-quiet" id="leaveCancel">Zurück</button>
 </dialog>
 
 <dialog id="dlgImport">

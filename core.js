@@ -338,7 +338,7 @@
     if (toMin(entry.bed) === null) errors.push('Zeit „ins Bett“ fehlt oder ist ungültig.');
     if (toMin(entry.wake) === null) errors.push('Zeit „aufgestanden“ fehlt oder ist ungültig.');
     var q = Number(entry.quality);
-    if (!isFinite(q) || q < 1 || q > 10) errors.push('Schlafqualität muss zwischen 1 und 10 liegen.');
+    if (!isFinite(q) || q < 1 || q > 10) errors.push('Erholung muss zwischen 1 und 10 liegen.');
     if (entry.factors && !Array.isArray(entry.factors)) errors.push('Faktoren müssen eine Liste sein.');
 
     if (!errors.length) {
@@ -450,7 +450,7 @@
       enough: withF.length >= MIN_PER_GROUP && withoutF.length >= MIN_PER_GROUP
     };
     if (!res.enough) return res;
-    // Untergrenzen: Qualität wird in ganzen Punkten erfasst (SD mind. 0,5),
+    // Untergrenzen: Erholung wird in ganzen Punkten erfasst (SD mind. 0,5),
     // Zeiten werden geschätzt (SD mind. 10 Minuten).
     res.quality = welch(withF.map(function (r) { return r.quality; }), withoutF.map(function (r) { return r.quality; }), 0.25);
     res.sleep = welch(withF.map(function (r) { return r.sleep; }), withoutF.map(function (r) { return r.sleep; }), 100);
@@ -544,7 +544,7 @@
       });
     }
 
-    // 5. Dauer <-> Qualität
+    // 5. Dauer <-> Erholung
     if (all.length >= MIN_FOR_CORRELATION) {
       var items = summarize(all, goal).items;
       var r = pearson(items.map(function (x) { return x.d.sleep; }), items.map(function (x) { return x.quality; }));
@@ -696,7 +696,7 @@
 
   function toCsv(entries) {
     var head = ['datum', 'ins_bett', 'aufgestanden', 'einschlafdauer_min', 'wachzeit_min',
-      'zeit_im_bett_min', 'schlafdauer_min', 'effizienz_prozent', 'qualitaet',
+      'zeit_im_bett_min', 'schlafdauer_min', 'effizienz_prozent', 'erholung',
       'temp_einschlafen_c', 'temp_aufwachen_c', 'faktoren', 'notiz'];
     var rows = sortEntries(entries).map(function (e) {
       var d = derive(e) || { timeInBed: '', sleep: '', efficiency: 0 };
