@@ -314,6 +314,23 @@
     return best.value;
   }
 
+  // Schlafmitte: die Mitte zwischen Einschlafen und Aufstehen, in Minuten.
+  // Sie beschreibt den Rhythmus besser als Bett- oder Aufstehzeit allein.
+  function midSleep(entry) {
+    var b = toMin(entry.bed), w = toMin(entry.wake);
+    if (b === null || w === null) return null;
+    var onset = (b + Math.max(0, Number(entry.latency) || 0)) % DAY;
+    var span = w - onset;
+    if (span <= 0) span += DAY;
+    return Math.round(onset + span / 2) % DAY;
+  }
+
+  function meanNightMinutes(list) {
+    var vals = list.filter(function (v) { return v !== null && v !== undefined; }).map(toNightAxis);
+    if (!vals.length) return null;
+    return fromNightAxis(mean(vals));
+  }
+
   // Ergänzt einen Eintrag um alle abgeleiteten Werte
   function derive(entry) {
     var tib = durationBetween(entry.bed, entry.wake);
@@ -407,7 +424,8 @@
   function summarize(entries, goalMin) {
     var list = sortEntries(entries).map(function (e) {
       var d = derive(e);
-      return { date: e.date, quality: e.quality, factors: e.factors || [], bed: e.bed, wake: e.wake, d: d };
+      return { date: e.date, quality: e.quality, factors: e.factors || [], bed: e.bed, wake: e.wake,
+        latency: e.latency, note: e.note, d: d };
     }).filter(function (x) { return x.d; });
 
     if (!list.length) return { count: 0 };
@@ -425,6 +443,10 @@
       goalHit: list.filter(function (x) { return x.d.sleep >= goalMin; }).length,
       goalRate: list.filter(function (x) { return x.d.sleep >= goalMin; }).length / list.length,
       debt: list.reduce(function (acc, x) { return acc + (goalMin - x.d.sleep); }, 0),
+      meanMid: (function () {
+        var m = meanNightMinutes(list.map(function (x) { return midSleep(x); }));
+        return m === null ? null : fromMin(m);
+      })(),
       bedSd: sdClockTime(list.map(function (x) { return x.bed; })),
       wakeSd: sdClockTime(list.map(function (x) { return x.wake; })),
       meanBed: meanClockTime(list.map(function (x) { return x.bed; })),
@@ -454,6 +476,45 @@
     // Zeiten werden geschätzt (SD mind. 10 Minuten).
     res.quality = welch(withF.map(function (r) { return r.quality; }), withoutF.map(function (r) { return r.quality; }), 0.25);
     res.sleep = welch(withF.map(function (r) { return r.sleep; }), withoutF.map(function (r) { return r.sleep; }), 100);
+    return res;
+  }
+
+  /**
+   * Vergleicht die Nächte auf Samstag und Sonntag (also Freitag- und
+   * Samstagabend) mit den übrigen. Braucht keine zusätzliche Eingabe.
+   */
+  var MIN_WEEKEND = 3;
+  var MIN_WEEKDAY = 5;
+
+  function weekendComparison(entries) {
+    var we = [], wd = [];
+    sortEntries(entries).forEach(function (e) {
+      var d = derive(e);
+      var mid = midSleep(e);
+      if (!d || mid === null) return;
+      var rec = { sleep: d.sleep, bed: toMin(e.bed), mid: mid, quality: e.quality };
+      (isWeekendNight(e.date) ? we : wd).push(rec);
+    });
+    var res = { nWeekend: we.length, nWeek: wd.length,
+      enough: we.length >= MIN_WEEKEND && wd.length >= MIN_WEEKDAY };
+    if (!res.enough) return res;
+    function group(list) {
+      return {
+        n: list.length,
+        sleep: mean(list.map(function (r) { return r.sleep; })),
+        quality: mean(list.map(function (r) { return r.quality; })),
+        bed: fromMin(meanNightMinutes(list.map(function (r) { return r.bed; }))),
+        mid: fromMin(meanNightMinutes(list.map(function (r) { return r.mid; }))),
+        midRaw: meanNightMinutes(list.map(function (r) { return r.mid; })),
+        bedRaw: meanNightMinutes(list.map(function (r) { return r.bed; }))
+      };
+    }
+    res.weekend = group(we);
+    res.week = group(wd);
+    // Differenz auf der Nachtachse, damit Mitternacht nicht stört
+    res.midShift = toNightAxis(res.weekend.midRaw) - toNightAxis(res.week.midRaw);
+    res.bedShift = toNightAxis(res.weekend.bedRaw) - toNightAxis(res.week.bedRaw);
+    res.sleepDiff = res.weekend.sleep - res.week.sleep;
     return res;
   }
 
@@ -532,6 +593,32 @@
           text: 'Deine Zubettgehzeit liegt stabil um ' + s.meanBed + ' Uhr (Schwankung rund ' + Math.round(s.bedSd) + ' Minuten).'
         });
       }
+    }
+
+    // 3b. Wochenende gegen Woche
+    var wk = weekendComparison(win);
+    if (wk.enough && (Math.abs(wk.midShift) >= 20 || Math.abs(wk.sleepDiff) >= 30)) {
+      var parts = [];
+      if (Math.abs(wk.bedShift) >= 15) {
+        parts.push('gehst du im Schnitt ' + formatDuration(Math.abs(wk.bedShift)) +
+          (wk.bedShift > 0 ? ' später' : ' früher') + ' ins Bett');
+      }
+      if (Math.abs(wk.sleepDiff) >= 15) {
+        parts.push('schläfst ' + formatDuration(Math.abs(wk.sleepDiff)) +
+          (wk.sleepDiff > 0 ? ' länger' : ' kürzer'));
+      }
+      out.push({
+        kind: 'weekend', tone: Math.abs(wk.midShift) >= 60 ? 'watch' : 'info',
+        title: 'Wochenende verschiebt deinen Rhythmus',
+        text: 'In den ' + wk.nWeekend + ' Nächten auf Samstag und Sonntag ' +
+          (parts.length ? parts.join(' und ') + '. ' : 'unterscheidet sich dein Schlaf. ') +
+          'Deine Schlafmitte liegt dabei um ' + formatDuration(Math.abs(wk.midShift)) +
+          (wk.midShift > 0 ? ' später' : ' früher') + ' als unter der Woche (' +
+          wk.weekend.mid + ' gegenüber ' + wk.week.mid + ' Uhr). ' +
+          (Math.abs(wk.midShift) >= 60
+            ? 'Eine Verschiebung über eine Stunde wirkt auf den Körper ähnlich wie ein Zeitzonenwechsel und kann den Montag schwer machen.'
+            : 'Das ist eine moderate Verschiebung.')
+      });
     }
 
     // 4. Schlafeffizienz
@@ -810,6 +897,8 @@
     derive: derive, validateEntry: validateEntry, normalizeEntry: normalizeEntry,
     sortEntries: sortEntries, lastNDays: lastNDays, summarize: summarize,
     factorComparison: factorComparison, rollingAverage: rollingAverage,
+    midSleep: midSleep, weekendComparison: weekendComparison, meanNightMinutes: meanNightMinutes,
+    MIN_WEEKEND: MIN_WEEKEND, MIN_WEEKDAY: MIN_WEEKDAY,
     nearestOption: nearestOption, factorLabel: factorLabel, cleanTemp: cleanTemp,
     MAX_FACTORS: MAX_FACTORS, setFactorCatalog: setFactorCatalog, getFactorCatalog: getFactorCatalog,
     defaultCatalog: defaultCatalog, sanitizeCatalog: sanitizeCatalog, makeFactorId: makeFactorId,

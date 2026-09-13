@@ -681,6 +681,21 @@ svg.chart { display: block; width: 100%; height: auto; touch-action: manipulatio
   font-variant-numeric: tabular-nums; border-top: 1px solid var(--line-soft); padding-top: 10px;
 }
 .readout-jump { margin-top: 10px; min-height: 44px; border-color: var(--line); }
+.readout-note {
+  display: inline-block; margin-top: 4px;
+  padding-left: 9px; border-left: 2px solid var(--line);
+  color: var(--text-faint); font-style: italic;
+}
+
+/* Vergleichstabelle Woche / Wochenende */
+table.cmp { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+table.cmp th, table.cmp td { padding: 9px 4px; text-align: right; font-weight: 400; }
+table.cmp thead th { border-bottom: 1px solid var(--line-soft); padding-bottom: 7px; }
+table.cmp thead th span { display: block; font-size: 13px; color: var(--text); font-weight: 500; }
+table.cmp thead th small { display: block; font-size: 11px; color: var(--text-faint); }
+table.cmp tbody th { text-align: left; font-size: 13px; color: var(--text-dim); }
+table.cmp tbody td { font-size: 15.5px; color: var(--text); }
+table.cmp tbody tr + tr th, table.cmp tbody tr + tr td { border-top: 1px solid var(--line-soft); }
 
 /* Verlauf */
 .hist-month { font-size: 13px; color: var(--text-faint); margin: 18px 0 8px; }
@@ -734,7 +749,15 @@ svg.chart { display: block; width: 100%; height: auto; touch-action: manipulatio
   color: var(--text-faint); display: grid; place-items: center; gap: 3px;
   font-size: 11px; padding: 8px 0 6px;
 }
-.nav button .ic { font-size: 19px; line-height: 1; }
+.nav button .ic { font-size: 19px; line-height: 1; position: relative; }
+.badge {
+  position: absolute;
+  top: -1px; right: -7px;
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: var(--bad);
+  border: 1.5px solid var(--bg);
+}
 .nav button[aria-current="page"] { color: var(--accent); }
 
 /* --------------------------------------------------------- Overlays */

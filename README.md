@@ -243,12 +243,25 @@ oder 90.
 - **Erholung** – Bewertung pro Nacht und 5-Tages-Schnitt.
 
 Tippe auf einen Balken, dann erscheinen die Details dieser Nacht unter dem
-Diagramm – samt Knopf **Diese Nacht ansehen**, der direkt zum Eintrag springt.
+Diagramm – mit deiner Notiz, falls du eine geschrieben hast, und dem Knopf
+**Diese Nacht ansehen**, der direkt zum Eintrag springt.
 
 Darunter folgt **ein** Kennzahlenblock mit den Durchschnitten für Schlafdauer,
-Erholung, Einschlafzeit und Wachzeit sowie dem Anteil erreichter
-Zielnächte und der Zahl erfasster Nächte. Danach die Texte: was in den Daten
-steht, wo du ansetzen könntest, der Faktorvergleich und das Streudiagramm.
+Erholung, Einschlafzeit, Wachzeit und Schlafmitte sowie dem Anteil erreichter
+Zielnächte. Danach der Vergleich **Woche und Wochenende**, dann die Texte: was
+in den Daten steht, wo du ansetzen könntest, der Faktorvergleich und das
+Streudiagramm.
+
+Die **Schlafmitte** ist die Mitte zwischen Einschlafen und Aufstehen. Sie
+beschreibt deinen Rhythmus genauer als Bett- oder Aufstehzeit allein, weil sie
+beide zusammenfasst – und sie ist der übliche Wert, wenn man Schlafrhythmen
+miteinander vergleicht.
+
+**Woche und Wochenende** stellt die Nächte auf Samstag und Sonntag den übrigen
+gegenüber: Dauer, Bettzeit, Schlafmitte und Erholung. Die Verschiebung der
+Schlafmitte heißt sozialer Jetlag; ab etwa einer Stunde macht sie sich für viele
+am Montag bemerkbar. Nötig sind dafür mindestens 3 Wochenend- und 5
+Wochennächte im gewählten Zeitraum.
 
 Kurze Zeiträume liefern zwangsläufig weniger Aussagen. Bei 5 Tagen sagt die App
 zu einzelnen Faktoren nichts – dafür braucht sie mindestens fünf Nächte mit und
@@ -307,7 +320,16 @@ zum Beispiel `schlaftagebuch-20260908.json`. Sie enthält alle Nächte, dein Zie
 und deine Faktoren.
 
 Schieb sie irgendwohin, wo sie sicher liegt: Google Drive, E-Mail an dich
-selbst, USB-Stick. Einmal im Monat reicht völlig.
+selbst, USB-Stick.
+
+Die App erinnert dich daran: Liegt die letzte Sicherung mehr als eine Woche
+zurück **und** sind seitdem neue Nächte dazugekommen, erscheint ein roter Punkt
+am Reiter *Einstellungen*. Sicherst du, verschwindet er. Unter *Sicherung und
+Umzug* steht außerdem, wann zuletzt gesichert wurde.
+
+Zusätzlich bittet die App beim Start um dauerhaften Speicher, damit Android die
+Daten nicht bei Platzmangel wegräumt. Für eine installierte App gewährt Chrome
+das meist ohne Rückfrage – ein Backup ersetzt es trotzdem nicht.
 
 **Daten als CSV exportieren** ist nur zum Anschauen in Excel oder Google
 Tabellen gedacht. CSV lässt sich nicht zurücklesen – für Backups immer JSON.
@@ -397,9 +419,9 @@ und `schlaftagebuch.draft.v1` mit der gerade offenen, noch nicht gespeicherten
 Eingabe. Vormerkung und Entwurf sind bewusst getrennt, damit sie keine Statistik
 verfälschen.
 
-Die Rechenlogik in `core.js` ist bewusst vom Rest getrennt und mit 167
+Die Rechenlogik in `core.js` ist bewusst vom Rest getrennt und mit 189
 automatischen Tests abgedeckt (`node tools/test-core.js`), die Oberfläche mit
-weiteren 418 (`node tools/test-ui.js`, benötigt `npm install jsdom`).
+weiteren 441 (`node tools/test-ui.js`, benötigt `npm install jsdom`).
 
 Die Hinweise in der Auswertung beschreiben Muster in deinen eigenen Zahlen. Sie
 sind keine Diagnose und ersetzen keine ärztliche Beratung. Bei anhaltenden

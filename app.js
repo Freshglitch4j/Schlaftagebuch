@@ -14,7 +14,7 @@
   var KEY_BACKUP = 'schlaftagebuch.backup.v1';
   var KEY_PLANNED = 'schlaftagebuch.planned.v1';
   var KEY_DRAFT = 'schlaftagebuch.draft.v1';
-  var APP_VERSION = 'v16';
+  var APP_VERSION = 'v17';
 
   var $ = function (sel) { return document.querySelector(sel); };
   var $$ = function (sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); };
@@ -200,6 +200,34 @@
       dlg.addEventListener('close', onClose);
       dlg.showModal();
     });
+  }
+
+  /* Sicherungserinnerung: Die Daten liegen nur auf diesem Gerät. Wenn seit
+     einer Woche nicht gesichert wurde UND seitdem neue Nächte dazugekommen
+     sind, bekommt der Reiter „Einstellungen“ einen roten Punkt. */
+  var BACKUP_DAYS = 7;
+
+  function daysSinceExport() {
+    var last = state.settings.lastExportAt;
+    if (!last) return null;
+    var t = new Date(last).getTime();
+    if (!isFinite(t)) return null;
+    return (Date.now() - t) / 86400000;
+  }
+
+  function backupOverdue() {
+    if (state.entries.length < BACKUP_DAYS) return false;
+    var days = daysSinceExport();
+    if (days === null) return true;
+    if (days < BACKUP_DAYS) return false;
+    var last = state.settings.lastExportAt;
+    // Ohne neue Nächte gibt es nichts zu sichern – dann auch kein Hinweis
+    return state.entries.some(function (e) { return (e.updatedAt || '') > last; });
+  }
+
+  function updateBackupBadge() {
+    var badge = $('#moreBadge');
+    if (badge) badge.hidden = !backupOverdue();
   }
 
   function todayKey() { return C.dateKey(new Date()); }
@@ -579,9 +607,12 @@
     // Eine eingetragene Nacht braucht ihre Vormerkung nicht mehr
     if (state.planned && state.planned.date === d.date) savePlanned(null);
     forgetDraft();
-    var der = C.derive(d);
-    toast('Gespeichert · ' + C.formatDuration(der.sleep) + ' Schlaf');
+    if (state.date === lastNight() && navigator.vibrate) {
+      try { navigator.vibrate(20); } catch (e) {}
+    }
+    toast('Gespeichert');
     renderNight();
+    updateBackupBadge();
     return true;
   }
 
@@ -924,7 +955,7 @@
     var goal = state.settings.goalMin, minimum = state.settings.minMin;
     var n = state.entries.length;
     $('#statsSub').textContent = n === 0 ? 'Noch keine Nächte erfasst'
-      : n + (n === 1 ? ' Nacht erfasst' : ' Nächte erfasst') + ' · Ziel ' + C.formatDuration(goal, { short: true });
+      : '(Insgesamt ' + n + (n === 1 ? ' Nacht erfasst)' : ' Nächte erfasst)');
 
     if (n === 0) {
       body.appendChild(el('div', { class: 'empty' }, [
@@ -956,7 +987,8 @@
           ' · ' + C.formatDuration(de.latency) + ' Einschlafen, ' + C.formatDuration(de.awake) + ' wach' +
           (e.tempBed !== null && e.tempBed !== undefined ? ' · ' + e.tempBed + ' °C' +
             (e.tempWake !== null && e.tempWake !== undefined ? ' → ' + e.tempWake + ' °C' : '') : '') +
-          ((e.factors || []).length ? '<br>' + e.factors.map(C.factorLabel).join(' · ') : '');
+          ((e.factors || []).length ? '<br>' + e.factors.map(C.factorLabel).join(' · ') : '') +
+          (e.note ? '<br><span class="readout-note">' + esc(e.note) + '</span>' : '');
       } else {
         readout.innerHTML = '<strong>' + C.formatDate(picked, 'long') + '</strong><br>Kein Eintrag für diese Nacht.';
       }
@@ -994,8 +1026,7 @@
         statBlock('Ziel erreicht', Math.round(st.goalRate * 100) + ' <small>%</small>',
           st.goalHit + ' von ' + st.count + ' Nächten',
           st.goalRate >= 0.6 ? 'v-ok' : 'v-mid'),
-        statBlock('Nächte erfasst', Math.round(st.count / state.range * 100) + ' <small>%</small>',
-          st.count + ' von ' + state.range + ' Tagen')
+        statBlock('Ø Schlafmitte', st.meanMid || '–', 'Mitte zwischen Einschlafen und Aufstehen')
       ]));
       var underMin = st.items.filter(function (x) { return x.d.sleep < minimum; }).length;
       var debt = st.debt;
@@ -1010,6 +1041,43 @@
       kCard.appendChild(el('p', { class: 'note-small', text: 'In diesem Zeitraum liegen keine Einträge vor.' }));
     }
     body.appendChild(kCard);
+
+    // --- 5b. Woche gegen Wochenende --------------------------------------
+    var wk = C.weekendComparison(win);
+    var wkCard = el('div', { class: 'card' }, [el('h2', { text: 'Woche und Wochenende' })]);
+    if (wk.enough) {
+      var rows = [
+        ['Ø Schlafdauer', C.formatDuration(wk.week.sleep), C.formatDuration(wk.weekend.sleep)],
+        ['Ø ins Bett', wk.week.bed, wk.weekend.bed],
+        ['Ø Schlafmitte', wk.week.mid, wk.weekend.mid],
+        ['Ø Erholung', wk.week.quality.toFixed(1), wk.weekend.quality.toFixed(1)]
+      ];
+      var table = el('table', { class: 'cmp' });
+      var thead = el('thead', {}, [el('tr', {}, [
+        el('th', { text: '' }),
+        el('th', {}, [el('span', { text: 'Mo–Do, So' }), el('small', { text: wk.nWeek + ' Nächte' })]),
+        el('th', {}, [el('span', { text: 'Fr + Sa' }), el('small', { text: wk.nWeekend + ' Nächte' })])
+      ])]);
+      var tbody = el('tbody');
+      rows.forEach(function (r) {
+        tbody.appendChild(el('tr', {}, [
+          el('th', { text: r[0] }), el('td', { text: r[1] }), el('td', { text: r[2] })
+        ]));
+      });
+      table.appendChild(thead); table.appendChild(tbody);
+      wkCard.appendChild(table);
+      wkCard.appendChild(el('p', { class: 'note-small',
+        text: 'Die Schlafmitte liegt am Wochenende ' + C.formatDuration(Math.abs(wk.midShift)) +
+          (wk.midShift >= 0 ? ' später' : ' früher') + '. Diese Verschiebung wird sozialer Jetlag genannt; ' +
+          'ab etwa einer Stunde macht sie sich für viele am Montag bemerkbar. ' +
+          'Gezählt werden die Nächte auf Samstag und Sonntag.' }));
+      body.appendChild(wkCard);
+    } else if (st.count >= 7) {
+      wkCard.appendChild(el('p', { class: 'note-small',
+        text: 'Für einen Vergleich braucht es mindestens ' + C.MIN_WEEKEND + ' Nächte auf Samstag oder Sonntag und ' +
+          C.MIN_WEEKDAY + ' unter der Woche. Bisher: ' + wk.nWeekend + ' und ' + wk.nWeek + '.' }));
+      body.appendChild(wkCard);
+    }
 
     // --- 6. Erkenntnisse --------------------------------------------------
     var insights = C.buildInsights(win, state.settings, maxDate(), state.range);
@@ -1252,6 +1320,16 @@
       el('p', { class: 'note-small',
         text: 'Die JSON-Datei enthält alles: Nächte, Ziel und Faktoren. Sie ist der Weg auf ein neues Handy. CSV ist nur zum Ansehen in einer Tabelle gedacht und lässt sich nicht zurücklesen.' })
     ]);
+    var since = daysSinceExport();
+    var sinceText = since === null
+      ? 'Noch nie gesichert.'
+      : (since < 1 ? 'Zuletzt gesichert: heute.' : 'Zuletzt gesichert vor ' + Math.floor(since) + ' Tagen.');
+    backupCard.insertBefore(el('p', {
+      class: backupOverdue() ? 'banner' : 'note-small',
+      style: backupOverdue() ? 'margin-bottom:14px' : 'margin:0 0 14px',
+      text: sinceText + (backupOverdue()
+        ? ' Deine Nächte liegen nur auf diesem Gerät – sichere sie jetzt.' : '')
+    }), backupCard.children[1]);
     if (readJson(KEY_BACKUP, null)) {
       backupCard.appendChild(el('button', { class: 'btn btn-quiet', text: 'Letzten Import rückgängig machen',
         onclick: undoImport }));
@@ -1395,7 +1473,11 @@
     if (!state.entries.length) { toast('Noch keine Daten zum Sichern.', true); return; }
     var data = C.buildExport(state.entries, state.settings);
     if (download('schlaftagebuch-' + stamp() + '.json', JSON.stringify(data, null, 2), 'application/json')) {
+      state.settings.lastExportAt = new Date().toISOString();
+      saveSettings();
+      updateBackupBadge();
       toast(state.entries.length + ' Nächte gesichert');
+      if (state.view === 'more') renderMore();
     }
   }
 
@@ -1531,6 +1613,7 @@
     if (view === 'stats') renderStats();
     if (view === 'more') renderMore();
     if (view === 'night') renderNight();
+    updateBackupBadge();
     window.scrollTo(0, 0);
   }
 
@@ -1708,11 +1791,20 @@
       picker.click();
     });
 
-    $('#inBed').addEventListener('input', function () {
-      if (C.toMin(this.value) !== null) { state.draft.bed = this.value; touch(); renderNight(); }
-    });
-    $('#inWake').addEventListener('input', function () {
-      if (C.toMin(this.value) !== null) { state.draft.wake = this.value; touch(); renderNight(); }
+    [['#inBed', 'bed'], ['#inWake', 'wake']].forEach(function (pair) {
+      var input = $(pair[0]);
+      input.addEventListener('input', function () {
+        if (C.toMin(this.value) !== null) { state.draft[pair[1]] = this.value; touch(); renderNight(); }
+      });
+      // Ein geleertes Feld darf nicht leer stehenbleiben, während intern
+      // noch der alte Wert gilt – sonst zeigt die App etwas anderes an,
+      // als sie speichern würde.
+      input.addEventListener('change', function () {
+        if (C.toMin(this.value) === null) this.value = state.draft[pair[1]];
+      });
+      input.addEventListener('blur', function () {
+        if (C.toMin(this.value) === null) this.value = state.draft[pair[1]];
+      });
     });
 
     $$('.stepbtn[data-step]').forEach(function (b) {
@@ -1851,6 +1943,16 @@
       $('#entryWarnings').appendChild(el('div', { class: 'banner',
         text: 'Dieser Browser erlaubt kein lokales Speichern (z. B. im privaten Modus). Einträge gehen beim Schließen verloren.' }));
     }
+
+    // Android darf den lokalen Speicher bei Platzmangel räumen. Für eine
+    // installierte PWA gewährt Chrome dauerhaften Speicher meist ohne Rückfrage.
+    if (navigator.storage && navigator.storage.persist) {
+      navigator.storage.persisted().then(function (already) {
+        if (!already) navigator.storage.persist().catch(function () {});
+      }).catch(function () {});
+    }
+
+    updateBackupBadge();
 
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () {
