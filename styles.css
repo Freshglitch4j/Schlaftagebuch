@@ -521,6 +521,8 @@ body.has-savebar .app { padding-bottom: calc(162px + env(safe-area-inset-bottom)
 input[type="range"] {
   width: 100%;
   height: var(--tap);
+  /* Senkrecht wird gescrollt, waagrecht gehört die Geste dem Regler */
+  touch-action: pan-y;
   background: transparent;
   -webkit-appearance: none;
   appearance: none;

@@ -14,7 +14,7 @@
   var KEY_BACKUP = 'schlaftagebuch.backup.v1';
   var KEY_PLANNED = 'schlaftagebuch.planned.v1';
   var KEY_DRAFT = 'schlaftagebuch.draft.v1';
-  var APP_VERSION = 'v15';
+  var APP_VERSION = 'v16';
 
   var $ = function (sel) { return document.querySelector(sel); };
   var $$ = function (sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); };
@@ -247,10 +247,10 @@
     return null;
   }
 
-  // Erholung: 1–4 rot, 5–7 gelb, 8–10 grün
+  // Erholung: 1–4 rot, 5–6 gelb, 7–10 grün
   function scoreClass(q) {
     if (q === null || q === undefined) return 'empty';
-    return q <= 4 ? 'bad' : (q <= 7 ? 'mid' : 'ok');
+    return q <= 4 ? 'bad' : (q <= 6 ? 'mid' : 'ok');
   }
 
   function renderScore(value) {
@@ -1585,6 +1585,43 @@
     return false;
   }
 
+  /* Der Schieberegler soll nur reagieren, wenn man den Knopf selbst erwischt.
+     Ein Tippen irgendwo auf die Leiste – wie es beim Scrollen und Wischen
+     passiert – darf den Wert nicht verstellen. */
+  function bindQualitySlider() {
+    var slider = $('#inQuality');
+    var guard = { active: false, allow: true, startValue: 7 };
+    var THUMB = 34;
+
+    function thumbCenter(rect, value) {
+      var frac = (value - 1) / 9;
+      return rect.left + THUMB / 2 + frac * (rect.width - THUMB);
+    }
+
+    slider.addEventListener('pointerdown', function (ev) {
+      var rect = this.getBoundingClientRect();
+      guard.active = true;
+      guard.startValue = parseInt(this.value, 10);
+      guard.allow = Math.abs(ev.clientX - thumbCenter(rect, guard.startValue)) <= THUMB * 0.85;
+      if (!guard.allow) ev.preventDefault();
+    });
+
+    ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function (type) {
+      slider.addEventListener(type, function () { guard.active = false; guard.allow = true; });
+    });
+
+    slider.addEventListener('input', function () {
+      // Zweite Absicherung, falls der Browser den Standard trotzdem ausführt
+      if (guard.active && !guard.allow) {
+        this.value = guard.startValue;
+        return;
+      }
+      state.draft.quality = parseInt(this.value, 10);
+      touch();
+      renderScore(state.draft.quality);
+    });
+  }
+
   function bindSwipe() {
     var x0 = 0, y0 = 0, t0 = 0, active = false;
 
@@ -1732,11 +1769,7 @@
       setTempsUnknown(this.getAttribute('aria-pressed') !== 'true');
     });
 
-    $('#inQuality').addEventListener('input', function () {
-      state.draft.quality = parseInt(this.value, 10);
-      touch();
-      renderScore(state.draft.quality);
-    });
+    bindQualitySlider();
 
     $('#inNote').addEventListener('input', function () { state.draft.note = this.value; touch(); });
 

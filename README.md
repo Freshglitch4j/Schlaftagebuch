@@ -123,15 +123,21 @@ größere Sprünge auf die Uhrzeit tippen – dann öffnet der Time Picker von A
 Die Felder stehen in der Reihenfolge, in der sie zusammengehören: zuerst alles,
 was die Schlafdauer bestimmt (Zeiten, Einschlafzeit, nächtliche Wachzeit), dann
 die **Erholung**, dann die Umstände (Temperatur, Faktoren, Notiz). Zahl und
-Schieberknopf der Erholung tragen dieselbe Ampelfarbe wie die Anzeige oben.
+Schieberknopf der Erholung tragen dieselbe Ampelfarbe wie die Anzeige oben:
+1–4 rot, 5–6 gelb, 7–10 grün.
+
+Der Schieberegler reagiert nur, wenn du den runden Knopf selbst erwischst. Ein
+Tippen irgendwo auf die Leiste verstellt nichts – sonst würde beim Scrollen
+oder Wischen versehentlich der Wert springen. Senkrecht scrollen lässt sich
+über dem Regler weiterhin.
 
 Rechts oben im Kopf sitzt **letzte Nacht** – ein Sprung dorthin zurück, egal
 wie weit du geblättert hast. Wechselst du zu einem anderen Reiter und wieder
 zurück, landest du auf dem zuletzt angesehenen Tag, nicht automatisch auf heute.
 
 Im Hauptblock steht rechts oben die **Erholung** dieser Nacht, in derselben
-Größe wie die Schlafdauer daneben. Die Farbe folgt dem Wert: 1–4 rot, 5–7 gelb,
-8–10 grün.
+Größe wie die Schlafdauer daneben. Die Farbe folgt dem Wert: 1–4 rot, 5–6 gelb,
+7–10 grün.
 
 Der Kopf zeigt drei Zeilen: eine kleine Einordnung (**Kommende Nacht**,
 **Letzte Nacht** oder **Frühere Nacht**), darunter Wochentag und Datum des
@@ -393,7 +399,7 @@ verfälschen.
 
 Die Rechenlogik in `core.js` ist bewusst vom Rest getrennt und mit 167
 automatischen Tests abgedeckt (`node tools/test-core.js`), die Oberfläche mit
-weiteren 406 (`node tools/test-ui.js`, benötigt `npm install jsdom`).
+weiteren 418 (`node tools/test-ui.js`, benötigt `npm install jsdom`).
 
 Die Hinweise in der Auswertung beschreiben Muster in deinen eigenen Zahlen. Sie
 sind keine Diagnose und ersetzen keine ärztliche Beratung. Bei anhaltenden
