@@ -14,7 +14,7 @@
   var KEY_BACKUP = 'schlaftagebuch.backup.v1';
   var KEY_PLANNED = 'schlaftagebuch.planned.v1';
   var KEY_DRAFT = 'schlaftagebuch.draft.v1';
-  var APP_VERSION = 'v13';
+  var APP_VERSION = 'v14';
 
   var $ = function (sel) { return document.querySelector(sel); };
   var $$ = function (sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); };
@@ -247,6 +247,18 @@
     return null;
   }
 
+  // Erholung: 1–4 rot, 5–7 gelb, 8–10 grün
+  function scoreClass(q) {
+    if (q === null || q === undefined) return 'empty';
+    return q <= 4 ? 'bad' : (q <= 7 ? 'mid' : 'ok');
+  }
+
+  function renderScore(value) {
+    var box = $('#scoreNum').parentNode;
+    $('#scoreNum').textContent = value === null ? '–' : value;
+    box.className = 'score-val is-' + scoreClass(value);
+  }
+
   function statusClass(sleepMin) {
     var st = C.sleepStatus(sleepMin, state.settings);
     return st === 'good' ? 'ok' : (st === 'bad' ? 'bad' : 'mid');
@@ -416,8 +428,7 @@
     var hasData = !!getEntry(state.date) || state.dirty;
     $('#hero').hidden = planned;
     $('#heroHead').textContent = hasData ? 'Schlafdauer' : 'Noch keine Daten für diese Nacht';
-    $('#scoreNum').textContent = hasData ? d.quality : '–';
-    $('#scoreNum').parentNode.className = 'score-val' + (hasData ? '' : ' is-empty');
+    renderScore(hasData ? d.quality : null);
     if (hasData && der && der.timeInBed > 0 && der.timeInBed <= 16 * 60) {
       var h = Math.floor(der.sleep / 60), m = der.sleep % 60;
       $('#heroNum').textContent = h + ':' + String(m).padStart(2, '0');
@@ -1726,6 +1737,7 @@
       touch();
       $('#qualVal').textContent = state.draft.quality;
       $('#qualWord').textContent = ' · ' + recoveryWord(state.draft.quality);
+      renderScore(state.draft.quality);
     });
 
     $('#inNote').addEventListener('input', function () { state.draft.note = this.value; touch(); });

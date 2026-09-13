@@ -120,11 +120,13 @@ Also meistens: Zeiten mit **−/+** in 5-Minuten-Schritten korrigieren, die
 Qualität am Schieber einstellen, antippen was war, **Nacht speichern**. Für
 größere Sprünge auf die Uhrzeit tippen – dann öffnet der Time Picker von Android.
 
-Rechts oben im Kopf sitzt **Heute** – ein Sprung zurück zur letzten Nacht, egal
+Rechts oben im Kopf sitzt **letzte Nacht** – ein Sprung dorthin zurück, egal
 wie weit du geblättert hast. Wechselst du zu einem anderen Reiter und wieder
 zurück, landest du auf dem zuletzt angesehenen Tag, nicht automatisch auf heute.
 
-Im Hauptblock steht rechts oben die **Erholung** dieser Nacht.
+Im Hauptblock steht rechts oben die **Erholung** dieser Nacht, in derselben
+Größe wie die Schlafdauer daneben. Die Farbe folgt dem Wert: 1–4 rot, 5–7 gelb,
+8–10 grün.
 
 Der Kopf zeigt drei Zeilen: eine kleine Einordnung (**Kommende Nacht**,
 **Letzte Nacht** oder **Frühere Nacht**), darunter Wochentag und Datum des
@@ -386,7 +388,7 @@ verfälschen.
 
 Die Rechenlogik in `core.js` ist bewusst vom Rest getrennt und mit 167
 automatischen Tests abgedeckt (`node tools/test-core.js`), die Oberfläche mit
-weiteren 361 (`node tools/test-ui.js`, benötigt `npm install jsdom`).
+weiteren 373 (`node tools/test-ui.js`, benötigt `npm install jsdom`).
 
 Die Hinweise in der Auswertung beschreiben Muster in deinen eigenen Zahlen. Sie
 sind keine Diagnose und ersetzen keine ärztliche Beratung. Bei anhaltenden

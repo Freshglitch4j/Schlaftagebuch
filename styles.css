@@ -176,7 +176,10 @@ body.has-savebar .app { padding-bottom: calc(162px + env(safe-area-inset-bottom)
   padding: 0 8px;
 }
 .iconbtn:active { background: var(--bg-elev-2); }
-.iconbtn-text { font-size: 12.5px; font-weight: 500; min-width: 50px; padding: 0 6px; }
+.iconbtn-text {
+  font-size: 12.5px; font-weight: 500; min-width: 52px; padding: 0 6px;
+  display: flex; flex-direction: column; justify-content: center; line-height: 1.15;
+}
 .iconbtn[disabled] { opacity: 0.35; }
 
 /* --------------------------------------------------------- Nacht-Hero */
@@ -197,10 +200,15 @@ body.has-savebar .app { padding-bottom: calc(162px + env(safe-area-inset-bottom)
 .hero-main { min-width: 0; }
 .hero-score { text-align: right; flex: 0 0 auto; }
 .score-val {
-  font-size: 30px; font-weight: 400; line-height: 1.1;
-  font-variant-numeric: tabular-nums; color: var(--data);
+  display: flex; align-items: baseline; justify-content: flex-end; gap: 4px;
+  font-size: 54px; font-weight: 300; line-height: 1;
+  letter-spacing: -0.03em; font-variant-numeric: tabular-nums;
+  min-height: 54px;
 }
-.score-val small { font-size: 13px; color: var(--text-faint); }
+.score-val small { font-size: 16px; font-weight: 400; color: var(--text-dim); letter-spacing: 0; }
+.score-val.is-ok { color: var(--ok); }
+.score-val.is-mid { color: var(--mid); }
+.score-val.is-bad { color: var(--bad); }
 .score-val.is-empty { color: var(--text-faint); }
 .hero-figure { display: flex; align-items: baseline; gap: 8px; }
 .hero-num {
