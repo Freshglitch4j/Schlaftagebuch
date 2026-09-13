@@ -174,7 +174,6 @@
 
 <div class="savebar" id="saveBar">
   <div class="savebar-inner">
-    <div class="savebar-note" id="saveNote">Noch nicht gespeichert</div>
     <button class="btn btn-primary" id="btnSave">Daten speichern</button>
   </div>
 </div>
@@ -192,6 +191,14 @@
   <p id="dlgText"></p>
   <button class="btn btn-danger" id="dlgOk">Ja</button>
   <button class="btn btn-quiet" id="dlgCancel">Abbrechen</button>
+</dialog>
+
+<dialog id="dlgLeave">
+  <h2>Nicht gespeicherte Eingaben</h2>
+  <p id="leaveText"></p>
+  <button class="btn btn-primary" id="leaveSave">Speichern und wechseln</button>
+  <button class="btn" id="leaveDiscard">Änderungen verwerfen</button>
+  <button class="btn btn-quiet" id="leaveCancel">Hierbleiben</button>
 </dialog>
 
 <dialog id="dlgImport">

@@ -133,18 +133,22 @@ wegrutscht. Sobald du das erste Feld anfasst, füllt er sich, und unten kommt de
 Knopf **Daten speichern**. Ohne Änderung gibt es keinen Knopf und nichts zu
 speichern. Nach dem Speichern bleibst du auf der Seite.
 
-**Ungespeicherte Eingaben gehen nicht verloren.** Wechselst du den Tag, den
-Reiter oder schließt die App ganz, stehen sie beim nächsten Öffnen dieser Nacht
-wieder da, und der Speicherknopf ist weiterhin sichtbar. Erst Speichern oder
-Löschen räumt sie weg.
+**Ungespeicherte Eingaben.** Beim Wechsel des Reiters bleiben sie einfach
+stehen – du findest sie unverändert vor, wenn du zurückkommst. Willst du dagegen
+den **Tag** wechseln, fragt die App nach: *Speichern und wechseln*,
+*Änderungen verwerfen* oder *Hierbleiben*. So kann nichts versehentlich
+verlorengehen und nichts versehentlich stehenbleiben.
+
+Sollte die App abstürzen oder das Fenster zugehen, findet sie beim nächsten
+Start die offenen Eingaben wieder und öffnet gleich den betreffenden Tag.
 
 Der Balken zeigt ausschließlich die **geschlafene Zeit** – Einschlafzeit und
 nächtliches Wachliegen sind bewusst nicht darin. Sonst wäre die Achse eine
 Mischung aus Uhrzeit und Dauer und stimmte an keiner Stelle. Darunter läuft
 eine Stundenskala, damit die zwei senkrechten Striche einzuordnen sind: sie
-markieren dein Minimum und dein Ziel. Die Skala reicht immer bis über das Ziel
-hinaus, deshalb sind beide Striche auch nach einer kurzen Nacht sichtbar und
-die Balken verschiedener Nächte sind vergleichbar. Der Balken wird **grün** ab
+markieren dein Minimum und dein Ziel. Die Skala steht fest auf neun Stunden –
+dadurch sind die Balken verschiedener Nächte direkt vergleichbar. Nur wenn eine
+Nacht oder dein Ziel darüber hinausgeht, wächst sie mit. Der Balken wird **grün** ab
 dem Ziel, **rot** unter dem Minimum und sonst **gelb**.
 
 **Einschlafzeit** und **Wachzeit** haben drei Knöpfe und eine freie Eingabe.
@@ -371,12 +375,13 @@ normalen Chrome-Fenster beziehungsweise über das Startbildschirm-Icon öffnen.
 
 Es gibt drei Ablagen im Browserspeicher: `schlaftagebuch.entries.v1` mit allen
 Nächten, `schlaftagebuch.planned.v1` mit der Vormerkung für die kommende Nacht
-und `schlaftagebuch.drafts.v1` mit noch nicht gespeicherten Eingaben. Vormerkung
-und Entwürfe sind bewusst getrennt, damit sie keine Statistik verfälschen.
+und `schlaftagebuch.draft.v1` mit der gerade offenen, noch nicht gespeicherten
+Eingabe. Vormerkung und Entwurf sind bewusst getrennt, damit sie keine Statistik
+verfälschen.
 
 Die Rechenlogik in `core.js` ist bewusst vom Rest getrennt und mit 167
 automatischen Tests abgedeckt (`node tools/test-core.js`), die Oberfläche mit
-weiteren 324 (`node tools/test-ui.js`, benötigt `npm install jsdom`).
+weiteren 339 (`node tools/test-ui.js`, benötigt `npm install jsdom`).
 
 Die Hinweise in der Auswertung beschreiben Muster in deinen eigenen Zahlen. Sie
 sind keine Diagnose und ersetzen keine ärztliche Beratung. Bei anhaltenden

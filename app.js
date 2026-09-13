@@ -13,8 +13,8 @@
   var KEY_SETTINGS = 'schlaftagebuch.settings.v1';
   var KEY_BACKUP = 'schlaftagebuch.backup.v1';
   var KEY_PLANNED = 'schlaftagebuch.planned.v1';
-  var KEY_DRAFTS = 'schlaftagebuch.drafts.v1';
-  var APP_VERSION = 'v11';
+  var KEY_DRAFT = 'schlaftagebuch.draft.v1';
+  var APP_VERSION = 'v12';
 
   var $ = function (sel) { return document.querySelector(sel); };
   var $$ = function (sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); };
@@ -51,7 +51,7 @@
     entries: [],
     settings: {},
     planned: null,
-    drafts: {},
+    pending: null,
     view: 'night',
     date: null,
     draft: null,
@@ -91,17 +91,12 @@
 
     // Vormerkung für eine kommende Nacht. Nur gültig, solange die Nacht
     // nicht schon als richtiger Eintrag existiert und nicht zu alt ist.
-    // Ungespeicherte Eingaben. Sie überleben Tageswechsel, Reiterwechsel und
-    // sogar einen Neustart – verloren gehen soll nichts, was getippt wurde.
-    var dr = readJson(KEY_DRAFTS, {});
-    state.drafts = {};
-    if (dr && typeof dr === 'object') {
-      Object.keys(dr).forEach(function (k) {
-        if (C.isValidKey(k) && k >= C.addDays(todayKey(), -30) && dr[k] && typeof dr[k] === 'object') {
-          state.drafts[k] = dr[k];
-        }
-      });
-    }
+    // Höchstens ein schwebender Entwurf: Der Tag lässt sich nicht verlassen,
+    // ohne zu entscheiden. Gespeichert wird er nur, damit ein Absturz oder ein
+    // geschlossenes Fenster die Eingaben nicht kostet.
+    var dr = readJson(KEY_DRAFT, null);
+    state.pending = (dr && C.isValidKey(dr.date) && dr.draft && typeof dr.draft === 'object' &&
+      dr.date >= C.addDays(todayKey(), -3)) ? dr : null;
 
     var pl = readJson(KEY_PLANNED, null);
     state.planned = (pl && C.isValidKey(pl.date) && pl.date >= C.addDays(refDate(), -2)) ? pl : null;
@@ -109,16 +104,16 @@
 
   var draftTimer = null;
   function rememberDraft() {
-    state.drafts[state.date] = JSON.parse(JSON.stringify(state.draft));
+    state.pending = { date: state.date, draft: JSON.parse(JSON.stringify(state.draft)) };
     clearTimeout(draftTimer);
-    draftTimer = setTimeout(function () { writeJson(KEY_DRAFTS, state.drafts); }, 400);
+    draftTimer = setTimeout(function () { writeJson(KEY_DRAFT, state.pending); }, 400);
   }
 
-  function forgetDraft(date) {
-    if (!state.drafts[date]) return;
-    delete state.drafts[date];
+  function forgetDraft() {
+    state.pending = null;
+    state.dirty = false;
     clearTimeout(draftTimer);
-    writeJson(KEY_DRAFTS, state.drafts);
+    try { localStorage.removeItem(KEY_DRAFT); } catch (e) {}
   }
 
   function savePlanned(p) {
@@ -354,6 +349,26 @@
     }
   }
 
+  // Der Balken hat eine feste Skala von neun Stunden. Nur wenn Schlafdauer
+  // oder Ziel darüber hinausgehen, wächst sie mit – sonst wären die Balken
+  // verschiedener Nächte nicht vergleichbar.
+  var BAR_BASE_MIN = 9 * 60;
+  function barAxis(sleepMin, goalMin) {
+    var ax = BAR_BASE_MIN;
+    if (sleepMin > ax) ax = Math.ceil(sleepMin / 60) * 60;
+    if (goalMin + 30 > ax) ax = Math.ceil((goalMin + 30) / 60) * 60;
+    return ax;
+  }
+
+  // Teilstriche ohne die erste und die letzte volle Stunde
+  function barTicks(scale, axisMax) {
+    scale.innerHTML = '';
+    var stepH = axisMax > 13 * 60 ? 2 : 1;
+    for (var h = 2; h * 60 <= axisMax - 60; h += stepH) {
+      scale.appendChild(el('i', { style: 'left:' + (h * 60 / axisMax * 100) + '%', text: h + 'h' }));
+    }
+  }
+
   function renderNight() {
     var d = state.draft;
     var planned = isPlannedDate(state.date);
@@ -409,7 +424,7 @@
       // und nächtliches Wachliegen bleiben draußen – sonst wäre die Skala
       // eine Mischung aus Uhrzeit und Dauer und stimmte nirgends.
       var sleep = der.sleep;
-      var axisMax = Math.ceil(Math.max(sleep, goal + 30) / 30) * 30;
+      var axisMax = barAxis(sleep, goal);
       bar.appendChild(el('div', {
         class: 'seg seg-sleep is-' + statusClass(sleep),
         style: 'width:' + (sleep / axisMax * 100) + '%'
@@ -421,10 +436,7 @@
       // Stundenskala unter dem Balken, damit die Striche einzuordnen sind
       var scale = $('#barScale');
       scale.innerHTML = '';
-      var stepH = axisMax > 11 * 60 ? 2 : 1;
-      for (var hh = stepH; hh * 60 <= axisMax - 15; hh += stepH) {
-        scale.appendChild(el('i', { style: 'left:' + (hh * 60 / axisMax * 100) + '%', text: hh + 'h' }));
-      }
+      barTicks(scale, axisMax);
       $('#barHint').innerHTML =
         'Balken = geschlafene Zeit. Striche: ' +
         '<b>Minimum ' + C.formatDuration(minimum, { short: true }) + '</b> und ' +
@@ -434,15 +446,13 @@
       $('#heroNum').textContent = '–:––';
       $('#heroNum').className = 'hero-num is-empty';
       $('#heroUnit').textContent = 'h';
-      var emptyAxis = Math.ceil((goal + 30) / 30) * 30;
+      var emptyAxis = barAxis(0, goal);
       [minimum, goal].forEach(function (v) {
         if (v > 0 && v <= emptyAxis) bar.appendChild(el('div', { class: 'mark', style: 'left:' + (v / emptyAxis * 100) + '%' }));
       });
       var scaleEmpty = $('#barScale');
       scaleEmpty.innerHTML = '';
-      for (var he = 1; he * 60 <= emptyAxis - 15; he++) {
-        scaleEmpty.appendChild(el('i', { style: 'left:' + (he * 60 / emptyAxis * 100) + '%', text: he + 'h' }));
-      }
+      barTicks(scaleEmpty, emptyAxis);
       $('#barHint').innerHTML = hasData
         ? 'Bitte die Zeiten prüfen.'
         : 'Trage die Daten unten ein und speichere sie. Striche: ' +
@@ -536,7 +546,10 @@
     renderTemps();
   }
 
-  function saveDraft() {
+  function saveDraft() { commitDraft(); }
+
+  // Gibt zurück, ob tatsächlich gespeichert wurde
+  function commitDraft() {
     if (isPlannedDate(state.date)) {
       savePlanned({
         date: state.date,
@@ -545,23 +558,69 @@
         factors: (state.draft.factors || []).slice(),
         note: state.draft.note || ''
       });
-      forgetDraft(state.date);
-      state.dirty = false;
+      forgetDraft();
       renderNight();
       toast('Für heute Nacht vorgemerkt');
-      return;
+      return true;
     }
     var d = Object.assign({}, state.draft, { updatedAt: new Date().toISOString() });
     var v = C.validateEntry(d);
-    if (!v.ok) { toast(v.errors[0], true); renderNight(); return; }
-    if (!upsertEntry(C.normalizeEntry(d))) return;
+    if (!v.ok) { toast(v.errors[0], true); renderNight(); return false; }
+    if (!upsertEntry(C.normalizeEntry(d))) return false;
     // Eine eingetragene Nacht braucht ihre Vormerkung nicht mehr
     if (state.planned && state.planned.date === d.date) savePlanned(null);
-    forgetDraft(d.date);
-    state.dirty = false;
+    forgetDraft();
     var der = C.derive(d);
     toast('Gespeichert · ' + C.formatDuration(der.sleep) + ' Schlaf');
     renderNight();
+    return true;
+  }
+
+  /* ---------------------------------------------- Tageswechsel absichern */
+
+  // Beim Verlassen eines Tages mit offenen Eingaben wird gefragt.
+  // Beim Reiterwechsel nicht – dort bleibt alles stehen und geht nicht verloren.
+  function confirmLeave() {
+    return new Promise(function (resolve) {
+      var dlg = $('#dlgLeave');
+      $('#leaveText').textContent = 'Für ' + C.formatDate(state.date, 'long') +
+        ' hast du Eingaben gemacht, die noch nicht gespeichert sind.';
+      var settled = false;
+      function done(v) {
+        if (settled) return;
+        settled = true;
+        $('#leaveSave').removeEventListener('click', onSave);
+        $('#leaveDiscard').removeEventListener('click', onDiscard);
+        $('#leaveCancel').removeEventListener('click', onCancel);
+        dlg.removeEventListener('close', onClose);
+        if (dlg.open) dlg.close();
+        resolve(v);
+      }
+      function onSave() { done('save'); }
+      function onDiscard() { done('discard'); }
+      function onCancel() { done('cancel'); }
+      function onClose() { done('cancel'); }
+      $('#leaveSave').addEventListener('click', onSave);
+      $('#leaveDiscard').addEventListener('click', onDiscard);
+      $('#leaveCancel').addEventListener('click', onCancel);
+      dlg.addEventListener('close', onClose);
+      dlg.showModal();
+    });
+  }
+
+  function goToDate(date) {
+    if (date === state.date) return;
+    if (!state.dirty) { openDate(date); return; }
+    confirmLeave().then(function (choice) {
+      if (choice === 'cancel') return;
+      if (choice === 'save') {
+        if (!commitDraft()) return;   // ungültig: auf der Seite bleiben
+      } else {
+        forgetDraft();
+        toast('Änderungen verworfen');
+      }
+      openDate(date);
+    });
   }
 
   /* -------------------------------------------------------- Diagramme */
@@ -855,12 +914,6 @@
     var durCard = el('div', { class: 'card' }, [el('h2', { text: 'Schlafdauer' })]);
     durCard.appendChild(rangeTabs());
     durCard.appendChild(el('div', { class: 'chart-wrap' }, [durationChart(state.range)]));
-    durCard.appendChild(el('div', { class: 'legend', html:
-      '<span><i class="swatch" style="background:var(--ok)"></i>Ziel erreicht</span>' +
-      '<span><i class="swatch" style="background:var(--bad)"></i>unter Minimum</span>' +
-      '<span><i class="swatch" style="background:var(--mid)"></i>dazwischen</span>' +
-      '<span><i class="swatch swatch-line" style="background:var(--text);opacity:.7"></i>5-Tages-Schnitt</span>' }));
-
     var readout = el('div', { class: 'readout' });
     if (state.selectedDay) {
       var e = getEntry(state.selectedDay);
@@ -1385,9 +1438,8 @@
       'Ja, alles löschen').then(function (yes) {
       if (!yes) return;
       state.entries = [];
-      state.drafts = {};
+      forgetDraft();
       saveEntries();
-      writeJson(KEY_DRAFTS, state.drafts);
       try { localStorage.removeItem(KEY_BACKUP); } catch (e) {}
       renderAll();
       toast('Alle Daten gelöscht');
@@ -1447,8 +1499,8 @@
 
   // Entweder der ungespeicherte Entwurf oder frische Vorgaben
   function loadDraftFor(date) {
-    if (state.drafts[date]) {
-      state.draft = JSON.parse(JSON.stringify(state.drafts[date]));
+    if (state.pending && state.pending.date === date) {
+      state.draft = JSON.parse(JSON.stringify(state.pending.draft));
       state.draft.date = date;
       state.dirty = true;
     } else {
@@ -1472,7 +1524,7 @@
   // Reihenfolge der Seiten: … ‹ Tage › · Auswertung · Einstellungen
   function pageForward() {
     if (state.view === 'night') {
-      if (state.date < navMax()) openDate(C.addDays(state.date, 1));
+      if (state.date < navMax()) goToDate(C.addDays(state.date, 1));
       else show('stats');
     } else if (state.view === 'stats') {
       show('more');
@@ -1482,7 +1534,7 @@
   function pageBack() {
     if (state.view === 'more') show('stats');
     else if (state.view === 'stats') show('night');
-    else openDate(C.addDays(state.date, -1));
+    else goToDate(C.addDays(state.date, -1));
   }
 
   // Elemente, auf denen ein Wischen etwas anderes bedeutet
@@ -1567,16 +1619,18 @@
       });
     });
 
-    $('#dayPrev').addEventListener('click', function () { openDate(C.addDays(state.date, -1)); });
+    $('#dayPrev').addEventListener('click', function () { goToDate(C.addDays(state.date, -1)); });
     $('#dayNext').addEventListener('click', function () {
       if (state.date >= navMax()) return;
-      openDate(C.addDays(state.date, 1));
+      goToDate(C.addDays(state.date, 1));
     });
 
     var picker = $('#datePicker');
     picker.addEventListener('change', function () {
       if (!C.isValidKey(this.value)) return;
-      openDate(this.value > navMax() ? navMax() : this.value);
+      var picked = this.value > navMax() ? navMax() : this.value;
+      this.value = state.date;   // erst nach der Entscheidung übernehmen
+      goToDate(picked);
     });
     $('#dayPick').addEventListener('click', function () {
       if (picker.showPicker) { try { picker.showPicker(); return; } catch (e) {} }
@@ -1659,7 +1713,7 @@
     $('#btnDeleteEntry').addEventListener('click', function () {
       if (isPlannedDate(state.date)) {
         savePlanned(null);
-        forgetDraft(state.date);
+        forgetDraft();
         state.draft = suggestDraft(state.date);
         state.dirty = false;
         renderNight();
@@ -1670,7 +1724,7 @@
         .then(function (yes) {
           if (!yes) return;
           deleteEntry(state.date);
-          forgetDraft(state.date);
+          forgetDraft();
           state.draft = suggestDraft(state.date);
           state.dirty = false;
           renderNight();
@@ -1715,7 +1769,7 @@
 
     loadAll();
     applyTheme();
-    state.date = lastNight();
+    state.date = (state.pending && state.pending.date <= navMax()) ? state.pending.date : lastNight();
     loadDraftFor(state.date);
     bind();
     if (window.history && window.history.replaceState) {
@@ -1751,6 +1805,6 @@
     renderStats: renderStats, renderMore: renderMore, maxDate: maxDate, moveFactor: moveFactor,
     lastNight: lastNight, navMax: navMax, KEY_PLANNED: KEY_PLANNED,
     handleImportFile: handleImportFile, loadDemo: loadDemo,
-    KEY_ENTRIES: KEY_ENTRIES, KEY_SETTINGS: KEY_SETTINGS, KEY_DRAFTS: KEY_DRAFTS,
+    KEY_ENTRIES: KEY_ENTRIES, KEY_SETTINGS: KEY_SETTINGS, KEY_DRAFT: KEY_DRAFT,
     plannedAvailable: plannedAvailable, pageForward: pageForward, pageBack: pageBack };
 })();

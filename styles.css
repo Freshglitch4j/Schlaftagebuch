@@ -571,10 +571,6 @@ details.note textarea {
 }
 .savebar.is-visible { display: block; }
 .savebar-inner { max-width: 560px; margin: 0 auto; }
-.savebar-note {
-  font-size: 11.5px; color: var(--text-faint); text-align: center;
-  margin-bottom: 6px; letter-spacing: 0.03em;
-}
 
 .btn {
   width: 100%;
