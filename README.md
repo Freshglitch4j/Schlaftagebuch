@@ -125,11 +125,18 @@ Der Kopf zeigt drei Zeilen: eine kleine Einordnung (**Kommende Nacht**,
 Abends, darunter die volle Zeitspanne der Nacht. Wochentag und Datum haben
 feste Breiten, deshalb bleibt beim Blättern alles an seinem Platz.
 
-Solange für eine Nacht nichts erfasst und nichts geändert ist, steht dort
-**„Keine Daten vorhanden“** – ohne Zahl und ohne Balken. Sobald du das erste
-Feld anfasst, erscheinen Schlafdauer und Balken, und unten kommt der Knopf
-**Daten speichern**. Ohne Änderung gibt es keinen Knopf und nichts zu speichern.
-Nach dem Speichern bleibst du auf der Seite.
+Solange für eine Nacht nichts erfasst und nichts geändert ist, steht über dem
+Balken **„Noch keine Daten für diese Nacht“**, die Zahl zeigt `–:––` und der
+Balken bleibt leer. Skala und Striche sind trotzdem schon da: Der Block behält
+immer dieselbe Höhe, damit die Seite beim Ausfüllen nicht unter dem Finger
+wegrutscht. Sobald du das erste Feld anfasst, füllt er sich, und unten kommt der
+Knopf **Daten speichern**. Ohne Änderung gibt es keinen Knopf und nichts zu
+speichern. Nach dem Speichern bleibst du auf der Seite.
+
+**Ungespeicherte Eingaben gehen nicht verloren.** Wechselst du den Tag, den
+Reiter oder schließt die App ganz, stehen sie beim nächsten Öffnen dieser Nacht
+wieder da, und der Speicherknopf ist weiterhin sichtbar. Erst Speichern oder
+Löschen räumt sie weg.
 
 Der Balken zeigt ausschließlich die **geschlafene Zeit** – Einschlafzeit und
 nächtliches Wachliegen sind bewusst nicht darin. Sonst wäre die Achse eine
@@ -151,9 +158,21 @@ gesperrt. Nimmst du das Häkchen wieder weg, stehen die vorher eingetippten
 Werte wieder da; ein Fehlgriff kostet also nichts. Hast du schon einmal eine Temperatur erfasst, schlägt die App beim
 nächsten Mal den zuletzt gemessenen Wert vor.
 
+### Wischen
+
+Nach links wischen führt vorwärts: einen Tag weiter, und an der letzten Nacht
+angekommen weiter zur **Auswertung** und zu den **Einstellungen**. Nach rechts
+geht es denselben Weg zurück und danach Nacht für Nacht in die Vergangenheit.
+Auf Schiebereglern, Eingabefeldern und Diagrammen wird nicht gewischt – dort
+bedeutet die Geste etwas anderes.
+
 ### Abends vormerken
 
-Tipp auf den Pfeil **›**. Dort steht „Kommende Nacht“. Du kannst schon
+Die kommende Nacht gibt es **ab 19:00 Uhr** (und nachts bis 3:00). Tagsüber
+führt der Pfeil **›** nicht weiter als bis zur letzten Nacht – vorher gäbe es
+dort ohnehin nichts einzutragen.
+
+Tipp abends auf den Pfeil **›**. Dort steht „Kommende Nacht“. Du kannst schon
 eintragen, wann du ins Bett gehst, wie warm es im Zimmer ist, was heute war und
 eine Notiz. Morgen früh steht das alles fertig da und du ergänzt nur noch
 Aufstehzeit, Einschlafzeit, Wachzeit und Bewertung.
@@ -350,13 +369,14 @@ normalen Chrome-Fenster beziehungsweise über das Startbildschirm-Icon öffnen.
 | `manifest.webmanifest` | Name, Icon, Vollbild |
 | `tools/` | Testprogramme, wird auf dem Handy nicht gebraucht |
 
-Es gibt zwei Ablagen im Browserspeicher: `schlaftagebuch.entries.v1` mit allen
-Nächten und `schlaftagebuch.planned.v1` mit der Vormerkung für die kommende
-Nacht. Die Vormerkung ist bewusst getrennt, damit sie keine Statistik verfälscht.
+Es gibt drei Ablagen im Browserspeicher: `schlaftagebuch.entries.v1` mit allen
+Nächten, `schlaftagebuch.planned.v1` mit der Vormerkung für die kommende Nacht
+und `schlaftagebuch.drafts.v1` mit noch nicht gespeicherten Eingaben. Vormerkung
+und Entwürfe sind bewusst getrennt, damit sie keine Statistik verfälschen.
 
 Die Rechenlogik in `core.js` ist bewusst vom Rest getrennt und mit 167
 automatischen Tests abgedeckt (`node tools/test-core.js`), die Oberfläche mit
-weiteren 274 (`node tools/test-ui.js`, benötigt `npm install jsdom`).
+weiteren 324 (`node tools/test-ui.js`, benötigt `npm install jsdom`).
 
 Die Hinweise in der Auswertung beschreiben Muster in deinen eigenen Zahlen. Sie
 sind keine Diagnose und ersetzen keine ärztliche Beratung. Bei anhaltenden

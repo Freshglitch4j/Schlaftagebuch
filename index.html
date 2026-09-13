@@ -47,13 +47,8 @@
       Morgen früh ergänzt du nur noch den Rest.</span>
     </div>
 
-    <div class="empty-night" id="emptyNight" hidden>
-      <strong>Keine Daten vorhanden</strong>
-      <span>Trage deine Daten unten ein und klicke auf „Daten speichern“.</span>
-    </div>
-
     <div class="hero" id="hero">
-      <div class="hero-head">Schlafdauer</div>
+      <div class="hero-head" id="heroHead">Schlafdauer</div>
       <div class="hero-figure">
         <span class="hero-num" id="heroNum">–</span>
         <span class="hero-unit" id="heroUnit">h</span>
@@ -179,7 +174,8 @@
 
 <div class="savebar" id="saveBar">
   <div class="savebar-inner">
-    <button class="btn btn-primary" id="btnSave">Nacht speichern</button>
+    <div class="savebar-note" id="saveNote">Noch nicht gespeichert</div>
+    <button class="btn btn-primary" id="btnSave">Daten speichern</button>
   </div>
 </div>
 

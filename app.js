@@ -13,7 +13,8 @@
   var KEY_SETTINGS = 'schlaftagebuch.settings.v1';
   var KEY_BACKUP = 'schlaftagebuch.backup.v1';
   var KEY_PLANNED = 'schlaftagebuch.planned.v1';
-  var APP_VERSION = 'v10';
+  var KEY_DRAFTS = 'schlaftagebuch.drafts.v1';
+  var APP_VERSION = 'v11';
 
   var $ = function (sel) { return document.querySelector(sel); };
   var $$ = function (sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); };
@@ -50,6 +51,7 @@
     entries: [],
     settings: {},
     planned: null,
+    drafts: {},
     view: 'night',
     date: null,
     draft: null,
@@ -89,8 +91,34 @@
 
     // Vormerkung für eine kommende Nacht. Nur gültig, solange die Nacht
     // nicht schon als richtiger Eintrag existiert und nicht zu alt ist.
+    // Ungespeicherte Eingaben. Sie überleben Tageswechsel, Reiterwechsel und
+    // sogar einen Neustart – verloren gehen soll nichts, was getippt wurde.
+    var dr = readJson(KEY_DRAFTS, {});
+    state.drafts = {};
+    if (dr && typeof dr === 'object') {
+      Object.keys(dr).forEach(function (k) {
+        if (C.isValidKey(k) && k >= C.addDays(todayKey(), -30) && dr[k] && typeof dr[k] === 'object') {
+          state.drafts[k] = dr[k];
+        }
+      });
+    }
+
     var pl = readJson(KEY_PLANNED, null);
     state.planned = (pl && C.isValidKey(pl.date) && pl.date >= C.addDays(refDate(), -2)) ? pl : null;
+  }
+
+  var draftTimer = null;
+  function rememberDraft() {
+    state.drafts[state.date] = JSON.parse(JSON.stringify(state.draft));
+    clearTimeout(draftTimer);
+    draftTimer = setTimeout(function () { writeJson(KEY_DRAFTS, state.drafts); }, 400);
+  }
+
+  function forgetDraft(date) {
+    if (!state.drafts[date]) return;
+    delete state.drafts[date];
+    clearTimeout(draftTimer);
+    writeJson(KEY_DRAFTS, state.drafts);
   }
 
   function savePlanned(p) {
@@ -190,8 +218,15 @@
   // nur vormerken, deshalb reicht die Navigation einen Tag weiter.
   function lastNight() { return C.addDays(refDate(), -1); }
   function maxDate() { return lastNight(); }
-  function navMax() { return refDate(); }
-  function isPlannedDate(d) { return d === refDate(); }
+  // Die kommende Nacht wird erst am Abend angeboten. Tagsüber bringt die
+  // Seite nichts und nimmt nur Platz weg.
+  var PLANNING_FROM_HOUR = 19;
+  function plannedAvailable() {
+    var h = new Date().getHours();
+    return h >= PLANNING_FROM_HOUR || h < DAY_CUTOFF_HOURS;
+  }
+  function navMax() { return plannedAvailable() ? refDate() : lastNight(); }
+  function isPlannedDate(d) { return d === refDate() && d > lastNight(); }
 
   function qualityWord(q) {
     if (q <= 2) return 'wie gerädert';
@@ -362,8 +397,8 @@
     var bar = $('#nightBar');
     bar.innerHTML = '';
     var hasData = !!getEntry(state.date) || state.dirty;
-    $('#emptyNight').hidden = planned || hasData;
-    $('#hero').hidden = planned || !hasData;
+    $('#hero').hidden = planned;
+    $('#heroHead').textContent = hasData ? 'Schlafdauer' : 'Noch keine Daten für diese Nacht';
     if (hasData && der && der.timeInBed > 0 && der.timeInBed <= 16 * 60) {
       var h = Math.floor(der.sleep / 60), m = der.sleep % 60;
       $('#heroNum').textContent = h + ':' + String(m).padStart(2, '0');
@@ -395,11 +430,24 @@
         '<b>Minimum ' + C.formatDuration(minimum, { short: true }) + '</b> und ' +
         '<b>Ziel ' + C.formatDuration(goal, { short: true }) + '</b>.';
     } else {
-      $('#heroNum').textContent = '–';
-      $('#heroNum').className = 'hero-num';
-      $('#heroUnit').textContent = '';
-      $('#barScale').innerHTML = '';
-      $('#barHint').textContent = hasData ? 'Bitte die Zeiten prüfen.' : '';
+      // Gleiche Bausteine, nur ohne Werte – so bleibt die Höhe konstant
+      $('#heroNum').textContent = '–:––';
+      $('#heroNum').className = 'hero-num is-empty';
+      $('#heroUnit').textContent = 'h';
+      var emptyAxis = Math.ceil((goal + 30) / 30) * 30;
+      [minimum, goal].forEach(function (v) {
+        if (v > 0 && v <= emptyAxis) bar.appendChild(el('div', { class: 'mark', style: 'left:' + (v / emptyAxis * 100) + '%' }));
+      });
+      var scaleEmpty = $('#barScale');
+      scaleEmpty.innerHTML = '';
+      for (var he = 1; he * 60 <= emptyAxis - 15; he++) {
+        scaleEmpty.appendChild(el('i', { style: 'left:' + (he * 60 / emptyAxis * 100) + '%', text: he + 'h' }));
+      }
+      $('#barHint').innerHTML = hasData
+        ? 'Bitte die Zeiten prüfen.'
+        : 'Trage die Daten unten ein und speichere sie. Striche: ' +
+          '<b>Minimum ' + C.formatDuration(minimum, { short: true }) + '</b> und ' +
+          '<b>Ziel ' + C.formatDuration(goal, { short: true }) + '</b>.';
     }
 
     // Warnungen und Fehler
@@ -497,6 +545,7 @@
         factors: (state.draft.factors || []).slice(),
         note: state.draft.note || ''
       });
+      forgetDraft(state.date);
       state.dirty = false;
       renderNight();
       toast('Für heute Nacht vorgemerkt');
@@ -508,6 +557,7 @@
     if (!upsertEntry(C.normalizeEntry(d))) return;
     // Eine eingetragene Nacht braucht ihre Vormerkung nicht mehr
     if (state.planned && state.planned.date === d.date) savePlanned(null);
+    forgetDraft(d.date);
     state.dirty = false;
     var der = C.derive(d);
     toast('Gespeichert · ' + C.formatDuration(der.sleep) + ' Schlaf');
@@ -1335,7 +1385,9 @@
       'Ja, alles löschen').then(function (yes) {
       if (!yes) return;
       state.entries = [];
+      state.drafts = {};
       saveEntries();
+      writeJson(KEY_DRAFTS, state.drafts);
       try { localStorage.removeItem(KEY_BACKUP); } catch (e) {}
       renderAll();
       toast('Alle Daten gelöscht');
@@ -1393,20 +1445,91 @@
     window.scrollTo(0, 0);
   }
 
+  // Entweder der ungespeicherte Entwurf oder frische Vorgaben
+  function loadDraftFor(date) {
+    if (state.drafts[date]) {
+      state.draft = JSON.parse(JSON.stringify(state.drafts[date]));
+      state.draft.date = date;
+      state.dirty = true;
+    } else {
+      state.draft = suggestDraft(date);
+      state.dirty = false;
+    }
+  }
+
   function openDate(date) {
     if (date > navMax()) date = navMax();
     state.date = date;
-    state.draft = suggestDraft(date);
-    state.dirty = false;
+    loadDraftFor(date);
     state.freeLatency = false;
     state.freeAwake = false;
     state.tempStash = null;
     show('night');
   }
 
+  /* ------------------------------------------------------------- Wischen */
+
+  // Reihenfolge der Seiten: … ‹ Tage › · Auswertung · Einstellungen
+  function pageForward() {
+    if (state.view === 'night') {
+      if (state.date < navMax()) openDate(C.addDays(state.date, 1));
+      else show('stats');
+    } else if (state.view === 'stats') {
+      show('more');
+    }
+  }
+
+  function pageBack() {
+    if (state.view === 'more') show('stats');
+    else if (state.view === 'stats') show('night');
+    else openDate(C.addDays(state.date, -1));
+  }
+
+  // Elemente, auf denen ein Wischen etwas anderes bedeutet
+  function blocksSwipe(node) {
+    while (node && node !== document.body) {
+      if (node.nodeType === 1) {
+        var tag = node.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'SVG' || tag === 'svg') return true;
+        if (node.classList && (node.classList.contains('grip') || node.classList.contains('chart'))) return true;
+      }
+      node = node.parentNode;
+    }
+    return false;
+  }
+
+  function bindSwipe() {
+    var x0 = 0, y0 = 0, t0 = 0, active = false;
+
+    document.addEventListener('touchstart', function (ev) {
+      active = false;
+      if (!ev.touches || ev.touches.length !== 1) return;
+      if (document.querySelector('dialog[open]')) return;
+      if (blocksSwipe(ev.target)) return;
+      x0 = ev.touches[0].clientX;
+      y0 = ev.touches[0].clientY;
+      t0 = Date.now();
+      active = true;
+    }, { passive: true });
+
+    document.addEventListener('touchend', function (ev) {
+      if (!active) return;
+      active = false;
+      var t = ev.changedTouches && ev.changedTouches[0];
+      if (!t) return;
+      var dx = t.clientX - x0, dy = t.clientY - y0;
+      // Deutlich waagrecht, deutlich weit, und keine lange Schleiferei
+      if (Math.abs(dx) < 70) return;
+      if (Math.abs(dx) < Math.abs(dy) * 1.8) return;
+      if (Date.now() - t0 > 800) return;
+      if (dx < 0) pageForward(); else pageBack();
+    }, { passive: true });
+  }
+
   function touch() {
     var wasClean = !state.dirty;
     state.dirty = true;
+    rememberDraft();
     updateSaveBar();
     // Bei der allerersten Änderung tritt der Hauptbildschirm aus dem
     // Leerzustand heraus – danach genügt das reine Aktualisieren.
@@ -1415,7 +1538,7 @@
 
   function renderAll() {
     if (state.date > navMax()) state.date = navMax();
-    state.draft = suggestDraft(state.date);
+    loadDraftFor(state.date);
     renderNight();
     if (state.view === 'stats') renderStats();
     if (state.view === 'more') renderMore();
@@ -1536,6 +1659,7 @@
     $('#btnDeleteEntry').addEventListener('click', function () {
       if (isPlannedDate(state.date)) {
         savePlanned(null);
+        forgetDraft(state.date);
         state.draft = suggestDraft(state.date);
         state.dirty = false;
         renderNight();
@@ -1546,6 +1670,7 @@
         .then(function (yes) {
           if (!yes) return;
           deleteEntry(state.date);
+          forgetDraft(state.date);
           state.draft = suggestDraft(state.date);
           state.dirty = false;
           renderNight();
@@ -1570,6 +1695,8 @@
       if (v !== state.view) show(v, true);
     });
 
+    bindSwipe();
+
     document.addEventListener('visibilitychange', function () {
       if (document.visibilityState !== 'visible') return;
       if (state.view === 'night' && state.date !== lastNight() && !state.dirty) openDate(lastNight());
@@ -1589,7 +1716,7 @@
     loadAll();
     applyTheme();
     state.date = lastNight();
-    state.draft = suggestDraft(state.date);
+    loadDraftFor(state.date);
     bind();
     if (window.history && window.history.replaceState) {
       try { window.history.replaceState({ view: 'night' }, ''); } catch (e) {}
@@ -1624,5 +1751,6 @@
     renderStats: renderStats, renderMore: renderMore, maxDate: maxDate, moveFactor: moveFactor,
     lastNight: lastNight, navMax: navMax, KEY_PLANNED: KEY_PLANNED,
     handleImportFile: handleImportFile, loadDemo: loadDemo,
-    KEY_ENTRIES: KEY_ENTRIES, KEY_SETTINGS: KEY_SETTINGS };
+    KEY_ENTRIES: KEY_ENTRIES, KEY_SETTINGS: KEY_SETTINGS, KEY_DRAFTS: KEY_DRAFTS,
+    plannedAvailable: plannedAvailable, pageForward: pageForward, pageBack: pageBack };
 })();
