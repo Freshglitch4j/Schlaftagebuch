@@ -190,9 +190,11 @@ bedeutet die Geste etwas anderes.
 
 ### Abends vormerken
 
-Die kommende Nacht gibt es **ab 19:00 Uhr** (und nachts bis 3:00). Tagsüber
-führt der Pfeil **›** nicht weiter als bis zur letzten Nacht – vorher gäbe es
-dort ohnehin nichts einzutragen.
+Die kommende Nacht gibt es **ab 19:00 Uhr** (und nachts bis 3:00). In dieser
+Zeit öffnet die App gleich dort – abends willst du vormerken, nicht nachtragen.
+Zurück zur letzten Nacht führt der Knopf **letzte Nacht** oder ein Schritt mit
+**‹**. Tagsüber startet die App wie gewohnt auf der letzten Nacht und der Pfeil
+**›** führt nicht weiter.
 
 Tipp abends auf den Pfeil **›**. Dort steht „Kommende Nacht“. Du kannst schon
 eintragen, wann du ins Bett gehst, wie warm es im Zimmer ist, was heute war und
@@ -421,7 +423,7 @@ verfälschen.
 
 Die Rechenlogik in `core.js` ist bewusst vom Rest getrennt und mit 189
 automatischen Tests abgedeckt (`node tools/test-core.js`), die Oberfläche mit
-weiteren 441 (`node tools/test-ui.js`, benötigt `npm install jsdom`).
+weiteren 465 (`node tools/test-ui.js`, benötigt `npm install jsdom`).
 
 Die Hinweise in der Auswertung beschreiben Muster in deinen eigenen Zahlen. Sie
 sind keine Diagnose und ersetzen keine ärztliche Beratung. Bei anhaltenden

@@ -14,7 +14,7 @@
   var KEY_BACKUP = 'schlaftagebuch.backup.v1';
   var KEY_PLANNED = 'schlaftagebuch.planned.v1';
   var KEY_DRAFT = 'schlaftagebuch.draft.v1';
-  var APP_VERSION = 'v17';
+  var APP_VERSION = 'v18';
 
   var $ = function (sel) { return document.querySelector(sel); };
   var $$ = function (sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); };
@@ -52,7 +52,7 @@
     settings: {},
     planned: null,
     pending: null,
-    anchoredToLast: true,
+    anchoredToStart: true,
     view: 'night',
     date: null,
     draft: null,
@@ -251,6 +251,9 @@
   }
   function navMax() { return plannedAvailable() ? refDate() : lastNight(); }
   function isPlannedDate(d) { return d === refDate() && d > lastNight(); }
+
+  // Womit die App startet: abends die kommende Nacht, sonst die letzte.
+  function startDate() { return plannedAvailable() ? refDate() : lastNight(); }
 
   function recoveryWord(q) {
     if (q <= 2) return 'wie gerädert';
@@ -1632,7 +1635,7 @@
   function openDate(date) {
     if (date > navMax()) date = navMax();
     state.date = date;
-    state.anchoredToLast = date === lastNight();
+    state.anchoredToStart = date === startDate();
     loadDraftFor(date);
     state.freeLatency = false;
     state.freeAwake = false;
@@ -1910,10 +1913,10 @@
 
     document.addEventListener('visibilitychange', function () {
       if (document.visibilityState !== 'visible') return;
-      // Nur mitziehen, wenn man ohnehin auf „der letzten Nacht“ stand und
-      // inzwischen ein Tageswechsel stattgefunden hat.
-      if (state.view === 'night' && state.anchoredToLast && !state.dirty && state.date !== lastNight()) {
-        openDate(lastNight());
+      // Nur mitziehen, wenn man ohnehin auf der Startnacht stand und sich
+      // inzwischen etwas geändert hat – der Tag oder der Beginn des Abends.
+      if (state.view === 'night' && state.anchoredToStart && !state.dirty && state.date !== startDate()) {
+        openDate(startDate());
       }
     });
   }
@@ -1930,8 +1933,8 @@
 
     loadAll();
     applyTheme();
-    state.date = (state.pending && state.pending.date <= navMax()) ? state.pending.date : lastNight();
-    state.anchoredToLast = state.date === lastNight();
+    state.date = (state.pending && state.pending.date <= navMax()) ? state.pending.date : startDate();
+    state.anchoredToStart = state.date === startDate();
     loadDraftFor(state.date);
     bind();
     if (window.history && window.history.replaceState) {
@@ -1975,7 +1978,7 @@
 
   window.__app = { state: state, show: show, openDate: openDate, saveDraft: saveDraft,
     renderStats: renderStats, renderMore: renderMore, maxDate: maxDate, moveFactor: moveFactor,
-    lastNight: lastNight, navMax: navMax, KEY_PLANNED: KEY_PLANNED,
+    lastNight: lastNight, navMax: navMax, startDate: startDate, KEY_PLANNED: KEY_PLANNED,
     handleImportFile: handleImportFile, loadDemo: loadDemo,
     KEY_ENTRIES: KEY_ENTRIES, KEY_SETTINGS: KEY_SETTINGS, KEY_DRAFT: KEY_DRAFT,
     plannedAvailable: plannedAvailable, pageForward: pageForward, pageBack: pageBack };
