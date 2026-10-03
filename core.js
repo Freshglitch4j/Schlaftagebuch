@@ -280,7 +280,7 @@
     minMin: 390,           // Minimum: 6 h 30 min – darunter gilt eine Nacht als zu kurz
     defaultBed: '22:30',
     defaultWake: '06:05',
-    theme: 'auto',
+    theme: 'blue',
     factors: DEFAULT_FACTORS.slice(),
     factorList: null,        // null bedeutet: Standardkatalog verwenden
     schemaVersion: 3
@@ -855,7 +855,7 @@
       if (toMin(data.settings.defaultBed) !== null) settings.defaultBed = data.settings.defaultBed;
       if (toMin(data.settings.defaultWake) !== null) settings.defaultWake = data.settings.defaultWake;
       if (settings.minMin && settings.goalMin && settings.minMin > settings.goalMin) settings.minMin = settings.goalMin;
-      if (['auto', 'light', 'dark'].indexOf(data.settings.theme) >= 0) settings.theme = data.settings.theme;
+      if (['auto', 'light', 'dark', 'blue'].indexOf(data.settings.theme) >= 0) settings.theme = data.settings.theme;
       if (Array.isArray(data.settings.factorList)) {
         var list = sanitizeCatalog(data.settings.factorList);
         if (list.length) settings.factorList = list;

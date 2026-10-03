@@ -57,6 +57,32 @@ html[data-theme="light"] {
   --shadow: 0 6px 18px rgba(20, 25, 35, 0.1);
 }
 
+/* Dritter Modus: helles Blau. Ruhiger als Weiß, deutlich heller als der
+   Nachtmodus – gedacht für die Nutzung am Tag. */
+html[data-theme="blue"] {
+  color-scheme: light;
+  --bg: #e7eef7;
+  --bg-elev: #ffffff;
+  --bg-elev-2: #f1f5fb;
+  --line: #c9d7e8;
+  --line-soft: #dce5f0;
+  --text: #16222f;
+  --text-dim: #4f6377;
+  --text-faint: #7a8da3;
+  --accent: #1f5f8b;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(31, 95, 139, 0.12);
+  --data: #2f7d72;
+  --bar: #7089aa;
+  --danger: #a4433a;
+  --danger-soft: rgba(164, 67, 58, 0.1);
+  --good: #3f7a3a;
+  --ok: #3f7a3a;
+  --mid: #b5751f;
+  --bad: #a4433a;
+  --shadow: 0 6px 18px rgba(20, 45, 80, 0.12);
+}
+
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
 /* Muss stärker sein als Klassenregeln, die display setzen */

@@ -14,7 +14,7 @@
   var KEY_BACKUP = 'schlaftagebuch.backup.v1';
   var KEY_PLANNED = 'schlaftagebuch.planned.v1';
   var KEY_DRAFT = 'schlaftagebuch.draft.v1';
-  var APP_VERSION = 'v19';
+  var APP_VERSION = 'v20';
 
   var $ = function (sel) { return document.querySelector(sel); };
   var $$ = function (sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); };
@@ -1307,7 +1307,7 @@
     // Darstellung
     var themeCard = el('div', { class: 'card' }, [el('h2', { text: 'Darstellung' })]);
     var seg = el('div', { class: 'segmented' });
-    [['auto', 'Automatisch'], ['dark', 'Dunkel'], ['light', 'Hell']].forEach(function (p) {
+    [['auto', 'Automatisch'], ['dark', 'Dunkel'], ['light', 'Hell'], ['blue', 'Hellblau']].forEach(function (p) {
       seg.appendChild(el('button', { type: 'button', text: p[1], 'aria-pressed': String(state.settings.theme === p[0]),
         onclick: function () { state.settings.theme = p[0]; saveSettings(); applyTheme(); renderMore(); } }));
     });
@@ -1761,7 +1761,8 @@
     }
     document.documentElement.setAttribute('data-theme', t);
     var meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', t === 'light' ? '#eef0f3' : '#12151c');
+    var bg = { light: '#eef0f3', blue: '#e7eef7', dark: '#12151c' }[t] || '#12151c';
+    if (meta) meta.setAttribute('content', bg);
   }
 
   /* ---------------------------------------------------------- Ereignisse */

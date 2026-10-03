@@ -216,7 +216,7 @@ Eine bereits gespeicherte Nacht lässt sich dort öffnen, ändern und löschen.
 |---|---|
 | **Nacht** | Eintrag der letzten Nacht, Vormerkung für die kommende, Kalendersprung. |
 | **Auswertung** | Zwei Diagramme, Kennzahlen zum gewählten Zeitraum, Erkenntnisse, Empfehlungen. |
-| **Einstellungen** | Ziel und Minimum, Vorauswahl der Uhrzeiten, besondere Faktoren, Hell/Dunkel, Sicherung. |
+| **Einstellungen** | Ziel und Minimum, Vorauswahl der Uhrzeiten, besondere Faktoren, Darstellung, Sicherung. |
 
 Die Zurück-Taste des Handys springt zwischen den Bereichen zurück.
 
@@ -268,6 +268,13 @@ Wochennächte im gewählten Zeitraum.
 Kurze Zeiträume liefern zwangsläufig weniger Aussagen. Bei 5 Tagen sagt die App
 zu einzelnen Faktoren nichts – dafür braucht sie mindestens fünf Nächte mit und
 fünf ohne den jeweiligen Faktor.
+
+### Darstellung
+
+Unter **Einstellungen → Darstellung** stehen vier Modi: *Automatisch* folgt der
+Systemeinstellung und wechselt zwischen Hell und Dunkel, dazu kommen *Dunkel*,
+*Hell* und *Hellblau*. Hellblau ist die Voreinstellung bei einer neuen
+Installation.
 
 ### Besondere Faktoren
 
